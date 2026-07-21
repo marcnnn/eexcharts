@@ -16,9 +16,14 @@ bindings, so selections arrive as ordinary LiveView events.
 ## Features
 
 - **Chart types:** line, area, bar/column (grouped, stacked, horizontal,
-  distributed), pie, donut
+  distributed), pie, donut, scatter, bubble, candlestick, box plot, range
+  bar, heatmap, treemap (squarified), radar, radial bar, polar area
 - **Curves:** `:smooth` (ApexCharts' 35% bezier), `:straight`, `:stepline`,
   `:monotone_cubic` (Fritsch–Carlson), with `nil`-value gaps
+- **Axes:** category, numeric, and datetime x-axes (ported TimeScale tick
+  logic), logarithmic y-axes, multiple y-axes with `opposite: true`
+- **Annotations:** y/x axis lines and bands, labeled point markers
+- **Theming:** light and dark (`theme: %{mode: :dark}`), custom palettes
 - **ApexCharts fidelity:** same default palette, per-type defaults, nice-scale
   axis algorithm, `column_width`/`bar_height` percentages, border radius
   (`:end` / `:around`), gradient area fills, donut center/total labels,
@@ -26,8 +31,8 @@ bindings, so selections arrive as ordinary LiveView events.
 - **Server-side everything:** charts render without any JS at all; the hook
   is only needed for hover tooltips
 - **LiveView-native interactivity:** `on_click` → `phx-click` with
-  `phx-value-index` / `phx-value-series`; optional `push_hover` pushes hover
-  events to the server
+  `phx-value-index` / `phx-value-series`; `on_legend_click` + `hidden_series`
+  for legend toggling; optional `push_hover` pushes hover events to the server
 - **No dependencies** beyond `phoenix_live_view`
 
 ## Installation

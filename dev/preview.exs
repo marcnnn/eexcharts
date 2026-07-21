@@ -165,18 +165,14 @@ defmodule Preview do
       chart("Datetime axis", %{
         id: "n3",
         type: :area,
-        series: [
-          %{
-            name: "Visitors",
-            data: [
-              [~D[2026-01-01], 31],
-              [~D[2026-02-01], 40],
-              [~D[2026-03-01], 28],
-              [~D[2026-04-01], 51],
-              [~D[2026-05-01], 42],
-              [~D[2026-06-01], 80]
-            ]
-          }
+        series: [%{name: "Visitors", data: [31, 40, 28, 51, 42, 80]}],
+        categories: [
+          ~D[2026-01-01],
+          ~D[2026-02-01],
+          ~D[2026-03-01],
+          ~D[2026-04-01],
+          ~D[2026-05-01],
+          ~D[2026-06-01]
         ],
         options: %{xaxis: %{type: :datetime}}
       }),

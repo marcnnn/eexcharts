@@ -904,9 +904,14 @@ defmodule EexCharts.Renderer do
       :box_plot -> Charts.BoxPlot.tooltip_value(cfg, v)
       :range_bar -> Charts.RangeBar.tooltip_value(cfg, v)
       t when t in [:scatter, :bubble] -> Charts.Scatter.tooltip_value(cfg, v)
-      _ -> format_tooltip_y(cfg, v)
+      _ -> format_tooltip_y(cfg, point_y(v))
     end
   end
+
+  # Tolerate `[x, y]` / `%{x:, y:}` data points on plain cartesian charts.
+  defp point_y([_x, y | _]), do: y
+  defp point_y(%{y: y}), do: y
+  defp point_y(v), do: v
 
   @doc false
   def format_tooltip_x(cfg, title) do
