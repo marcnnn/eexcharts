@@ -11,7 +11,7 @@ defmodule EexCharts.Charts.Pie do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Legend}
+  alias EexCharts.{Config, Legend, Scale}
 
   @doc """
   Computes slice geometry. Returns `%{cx, cy, r, donut_r, slices}` where each
@@ -24,6 +24,7 @@ defmodule EexCharts.Charts.Pie do
     indices = opts[:indices] || Enum.to_list(0..max(length(values) - 1, 0))
     pie_cfg = cfg.plot_options.pie
     stroke_w = cfg.stroke.width
+    polar? = cfg.chart.type == :polar_area
 
     size = min(box_w, box_h)
     cx = box_w / 2 + pie_cfg.offset_x
@@ -39,13 +40,32 @@ defmodule EexCharts.Charts.Pie do
 
     full_angle = abs(pie_cfg.end_angle - pie_cfg.start_angle)
     total = values |> Enum.map(&max(&1, 0)) |> Enum.sum()
+    count = length(values)
+
+    # Polar area: the value scale maps radius to a "nice" max so the largest
+    # slice reaches the outermost ring (ApexCharts drawPolarElements).
+    polar_scale =
+      if polar? do
+        raw_max = values |> Enum.map(&max(&1, 0)) |> Enum.max(fn -> 0 end)
+        Scale.nice_scale(0, Float.ceil(raw_max * 1.0))
+      end
+
+    polar_max = if polar?, do: max(polar_scale.nice_max, 1), else: 1
 
     {slices, _} =
       values
       |> Enum.with_index()
       |> Enum.map_reduce(pie_cfg.start_angle, fn {v, pos}, start ->
         v = max(v, 0)
-        angle = if total > 0, do: full_angle * v / total, else: 0
+
+        angle =
+          cond do
+            polar? -> full_angle / max(count, 1)
+            total > 0 -> full_angle * v / total
+            true -> 0
+          end
+
+        slice_r = if polar?, do: r * v / polar_max, else: r
         index = Enum.at(indices, pos, pos)
 
         slice = %{
@@ -55,13 +75,23 @@ defmodule EexCharts.Charts.Pie do
           pct: if(total > 0, do: 100 * v / total, else: 0),
           angle: angle,
           start_angle: start,
+          r: slice_r,
           color: Config.color_at(cfg, index)
         }
 
         {slice, start + angle}
       end)
 
-    %{cx: cx, cy: cy, r: r, donut_r: donut_r, full_angle: full_angle, slices: slices}
+    %{
+      cx: cx,
+      cy: cy,
+      r: r,
+      donut_r: donut_r,
+      full_angle: full_angle,
+      start_angle: pie_cfg.start_angle,
+      slices: slices,
+      polar_scale: polar_scale
+    }
   end
 
   @doc "Renders slices, slice labels and donut center labels."
@@ -98,12 +128,93 @@ defmodule EexCharts.Charts.Pie do
       end)
 
     [
+      polar_elements(cfg, geo),
       donut_background(cfg, geo),
       el("g", %{class: "eexcharts-pie-series"}, slices),
       slice_labels(cfg, geo),
       donut_center_labels(cfg, geo)
     ]
   end
+
+  # ── Polar area rings + spokes ─────────────────────────────────────────────
+
+  # Concentric background rings (one per nice-scale tick) plus radial spokes,
+  # drawn behind the slices (ApexCharts Pie.drawPolarElements).
+  defp polar_elements(cfg, %{polar_scale: scale} = geo) when scale != nil do
+    pa = cfg.plot_options.polar_area
+    ticks = scale.ticks
+    len = length(ticks)
+
+    rings =
+      if len > 1 do
+        diff = geo.r / (len - 1)
+        y_texts = Enum.reverse(ticks)
+
+        Enum.map(0..(len - 2), fn i ->
+          circle_r = geo.r - diff * i
+
+          label =
+            if cfg.yaxis.show do
+              el(
+                "text",
+                %{
+                  x: geo.cx,
+                  y: geo.cy - circle_r + cfg.yaxis.labels.style.font_size / 2,
+                  text_anchor: "middle",
+                  dominant_baseline: "central",
+                  fill: cfg.chart.fore_color,
+                  font_size: cfg.yaxis.labels.style.font_size
+                },
+                esc(fmt_value(Enum.at(y_texts, i)))
+              )
+            else
+              []
+            end
+
+          [
+            el("circle", %{
+              cx: geo.cx,
+              cy: geo.cy,
+              r: circle_r,
+              fill: "none",
+              stroke: pa.rings.stroke_color,
+              stroke_width: pa.rings.stroke_width
+            }),
+            label
+          ]
+        end)
+      else
+        []
+      end
+
+    spokes =
+      if pa.spokes.stroke_width > 0 do
+        count = length(geo.slices)
+        division = if count > 0, do: 360 / count, else: 360
+
+        Enum.map(0..(max(count, 1) - 1), fn i ->
+          {x, y} = polar(geo.cx, geo.cy, geo.r, geo.start_angle + division * i)
+
+          el("line", %{
+            x1: x,
+            y1: y,
+            x2: geo.cx,
+            y2: geo.cy,
+            stroke: spoke_color(pa.spokes.connector_colors, i),
+            stroke_width: pa.spokes.stroke_width
+          })
+        end)
+      else
+        []
+      end
+
+    el("g", %{class: "eexcharts-polar-grid"}, [rings, spokes])
+  end
+
+  defp polar_elements(_cfg, _geo), do: []
+
+  defp spoke_color(colors, i) when is_list(colors), do: Enum.at(colors, rem(i, length(colors)))
+  defp spoke_color(color, _i), do: color
 
   # Outer arc clockwise, then either wedge to center (pie) or inner arc
   # back (donut). Angle 0 points up; clamped just under a full turn so a
@@ -112,11 +223,12 @@ defmodule EexCharts.Charts.Pie do
     angle = min(s.angle, geo.full_angle - 0.01)
     end_angle = s.start_angle + angle
     large_arc = if angle > 180, do: 1, else: 0
+    sr = s.r
 
-    {x1, y1} = polar(geo.cx, geo.cy, geo.r, s.start_angle)
-    {x2, y2} = polar(geo.cx, geo.cy, geo.r, end_angle)
+    {x1, y1} = polar(geo.cx, geo.cy, sr, s.start_angle)
+    {x2, y2} = polar(geo.cx, geo.cy, sr, end_angle)
 
-    outer = [move(x1, y1), arc(geo.r, geo.r, 0, large_arc, 1, x2, y2)]
+    outer = [move(x1, y1), arc(sr, sr, 0, large_arc, 1, x2, y2)]
 
     if geo.donut_r > 0 do
       {ix1, iy1} = polar(geo.cx, geo.cy, geo.donut_r, end_angle)
