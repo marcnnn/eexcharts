@@ -73,7 +73,19 @@ defmodule EexCharts.Renderer do
     n = max(n, length(cfg.xaxis.categories))
 
     {y_min, y_max} = data_range(cfg, series)
-    l = Layout.build(cfg, names, n, {y_min, y_max})
+
+    y_axes = Config.yaxes(cfg)
+
+    y_ranges =
+      if length(y_axes) > 1 do
+        per_axis_y_ranges(cfg, series, y_axes)
+      else
+        [{y_min, y_max}]
+      end
+
+    x_range = if Layout.value_x?(cfg), do: x_value_range(cfg, series, n), else: nil
+
+    l = Layout.build(cfg, names, n, y_ranges, x_range)
 
     categories = categories(cfg, n)
 
@@ -108,8 +120,10 @@ defmodule EexCharts.Renderer do
 
     # For bar charts the zones sit *behind* the bars, so bars keep their
     # :hover styling and phx-click; the bars themselves carry data-j for the
-    # tooltip. For line/area the zones sit on top of everything.
-    zones = hover_zones(cfg, l, params)
+    # tooltip. For line/area the zones sit on top of everything. Value x-axes
+    # (numeric/datetime/scatter) have no category slots, so the markers
+    # themselves are the hover targets — no band zones.
+    zones = if Layout.value_x?(cfg), do: [], else: hover_zones(cfg, l, params)
 
     svg =
       svg_open(cfg, l, id, [
@@ -164,6 +178,37 @@ defmodule EexCharts.Renderer do
       :range_bar -> Charts.RangeBar.data_range(series)
       t when t in [:scatter, :bubble] -> Charts.Scatter.data_range(series)
       _ -> numeric_data_range(cfg, series)
+    end
+  end
+
+  # Per-y-axis value ranges for multiple y-axes.
+  defp per_axis_y_ranges(cfg, series, y_axes) do
+    Enum.map(0..(length(y_axes) - 1), fn ai ->
+      ys =
+        for s <- series,
+            Layout.axis_index_for(y_axes, s) == ai,
+            {_j, _x, y, _z} <- Layout.series_points(cfg, s.data),
+            is_number(y),
+            do: y
+
+      case ys do
+        [] -> {nil, nil}
+        _ -> Enum.min_max(ys)
+      end
+    end)
+  end
+
+  # Overall x-value range for numeric / datetime / scatter x-axes.
+  defp x_value_range(cfg, series, n) do
+    xs =
+      for s <- series,
+          {_j, x, _y, _z} <- Layout.series_points(cfg, s.data),
+          is_number(x),
+          do: x
+
+    case xs do
+      [] -> {0, max(n, 1)}
+      _ -> Enum.min_max(xs)
     end
   end
 
@@ -286,18 +331,20 @@ defmodule EexCharts.Renderer do
         end
 
       category_lines =
-        if cfg.grid.xaxis_lines do
-          Enum.map(0..(l.n - 1), fn i ->
-            p = Layout.category_pos(l, i)
+        cond do
+          not cfg.grid.xaxis_lines ->
+            []
 
-            if l.horizontal do
+          l.horizontal ->
+            Enum.map(0..(l.n - 1), fn i ->
+              p = Layout.category_pos(l, i)
               grid_line(cfg, l.grid_x, p, l.grid_x + l.grid_w, p, dash)
-            else
+            end)
+
+          true ->
+            Enum.map(x_tick_positions(l), fn p ->
               grid_line(cfg, p, l.grid_y, p, l.grid_y + l.grid_h, dash)
-            end
-          end)
-        else
-          []
+            end)
         end
 
       el("g", %{class: "eexcharts-grid"}, [value_lines, category_lines])
@@ -345,9 +392,7 @@ defmodule EexCharts.Renderer do
 
     ticks =
       if cfg.xaxis.axis_ticks.show and not l.horizontal do
-        Enum.map(0..(l.n - 1), fn i ->
-          x = Layout.category_pos(l, i)
-
+        Enum.map(x_tick_positions(l), fn x ->
           el("line", %{
             x1: x,
             y1: l.grid_y + l.grid_h,
@@ -363,47 +408,113 @@ defmodule EexCharts.Renderer do
     [border, ticks]
   end
 
-  # Value labels: left for vertical charts, bottom for horizontal bars.
+  # X positions for tick marks / vertical grid lines: scale ticks for a value
+  # x-axis, category slots otherwise.
+  defp x_tick_positions(%Layout{x_scale: xs} = l) when is_map(xs) do
+    Enum.map(xs.ticks, fn %{value: v} -> Layout.x_value_pos(l, v) end)
+  end
+
+  defp x_tick_positions(l), do: Enum.map(0..(l.n - 1), fn i -> Layout.category_pos(l, i) end)
+
+  # Value labels: left/right for vertical charts (one group per y-axis;
+  # `opposite: true` axes render on the right), bottom for horizontal bars.
   defp value_axis_labels(cfg, l) do
-    if cfg.yaxis.show and cfg.yaxis.labels.show do
-      style = cfg.yaxis.labels.style
+    if l.horizontal do
+      horizontal_value_labels(cfg, l)
+    else
+      labels =
+        l.y_axes
+        |> Enum.zip(l.scales)
+        |> Enum.map(fn {axis, scale} -> vertical_axis_labels(cfg, l, axis, scale) end)
+
+      el("g", %{class: "eexcharts-yaxis-labels"}, labels)
+    end
+  end
+
+  defp vertical_axis_labels(cfg, l, axis, scale) do
+    if axis.show and axis.labels.show do
+      style = axis.labels.style
+      color = axis_label_color(style.colors, cfg.chart.fore_color)
+
+      {x, anchor} =
+        if axis.opposite,
+          do: {l.grid_x + l.grid_w + 8, "start"},
+          else: {l.grid_x - 8, "end"}
+
+      Enum.map(scale.ticks, fn t ->
+        el(
+          "text",
+          %{
+            x: x,
+            y: Layout.y_for(l, t, scale),
+            text_anchor: anchor,
+            dominant_baseline: "central",
+            fill: color,
+            font_size: style.font_size,
+            font_weight: style.font_weight
+          },
+          esc(Layout.format_y_label(cfg, axis, t))
+        )
+      end)
+    else
+      []
+    end
+  end
+
+  defp horizontal_value_labels(cfg, l) do
+    axis = hd(l.y_axes)
+
+    if axis.show and axis.labels.show do
+      style = axis.labels.style
       color = axis_label_color(style.colors, cfg.chart.fore_color)
 
       labels =
         Enum.map(l.scale.ticks, fn t ->
-          text = Layout.format_y_label(cfg, t)
-
-          if l.horizontal do
-            el(
-              "text",
-              %{
-                x: Layout.x_for(l, t),
-                y: l.grid_y + l.grid_h + style.font_size + 8,
-                text_anchor: "middle",
-                fill: color,
-                font_size: style.font_size,
-                font_weight: style.font_weight
-              },
-              esc(text)
-            )
-          else
-            el(
-              "text",
-              %{
-                x: l.grid_x - 8,
-                y: Layout.y_for(l, t),
-                text_anchor: "end",
-                dominant_baseline: "central",
-                fill: color,
-                font_size: style.font_size,
-                font_weight: style.font_weight
-              },
-              esc(text)
-            )
-          end
+          el(
+            "text",
+            %{
+              x: Layout.x_for(l, t),
+              y: l.grid_y + l.grid_h + style.font_size + 8,
+              text_anchor: "middle",
+              fill: color,
+              font_size: style.font_size,
+              font_weight: style.font_weight
+            },
+            esc(Layout.format_y_label(cfg, axis, t))
+          )
         end)
 
       el("g", %{class: "eexcharts-yaxis-labels"}, labels)
+    else
+      []
+    end
+  end
+
+  # Value x-axis (numeric / datetime): labels sit at scale-tick positions,
+  # placed by x value rather than category slot.
+  defp category_axis_labels(cfg, %Layout{x_scale: xs} = l, _categories) when is_map(xs) do
+    if cfg.xaxis.labels.show do
+      style = cfg.xaxis.labels.style
+      color = axis_label_color(style.colors, cfg.chart.fore_color)
+      tick_h = if cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
+
+      labels =
+        Enum.map(xs.ticks, fn %{value: v, label: label} ->
+          el(
+            "text",
+            %{
+              x: Layout.x_value_pos(l, v),
+              y: l.grid_y + l.grid_h + tick_h + style.font_size + 4,
+              text_anchor: "middle",
+              fill: color,
+              font_size: style.font_size,
+              font_weight: style.font_weight
+            },
+            esc(format_x_label(cfg, label))
+          )
+        end)
+
+      el("g", %{class: "eexcharts-xaxis-labels"}, labels)
     else
       []
     end
@@ -483,23 +594,28 @@ defmodule EexCharts.Renderer do
   defp axis_label_color(c, _fore) when is_binary(c), do: c
 
   defp y_axis_title(cfg, l) do
-    if cfg.yaxis.title.text do
-      style = cfg.yaxis.title.style
-      x = style.font_size
+    Enum.map(l.y_axes, fn axis -> one_y_axis_title(cfg, l, axis) end)
+  end
+
+  defp one_y_axis_title(cfg, l, axis) do
+    if axis.title.text do
+      style = axis.title.style
+      x = if axis.opposite, do: l.w - style.font_size, else: style.font_size
       y = l.grid_y + l.grid_h / 2
+      rotate = if axis.opposite, do: 90, else: -90
 
       el(
         "text",
         %{
           x: x,
           y: y,
-          transform: "rotate(-90 #{fmt(x)} #{fmt(y)})",
+          transform: "rotate(#{rotate} #{fmt(x)} #{fmt(y)})",
           text_anchor: "middle",
           fill: style.color || cfg.chart.fore_color,
           font_size: style.font_size,
           font_weight: style.font_weight
         },
-        esc(cfg.yaxis.title.text)
+        esc(axis.title.text)
       )
     else
       []

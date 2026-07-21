@@ -6,9 +6,14 @@ defmodule EexCharts.Layout do
 
   ApexCharts measures rendered DOM text; server-side we estimate text extents
   from character counts (`text_width/2`).
+
+  Supports a single value scale (the common case) as well as multiple y-axes
+  (`cfg.yaxis` as a list), logarithmic y-axes, and numeric/datetime x-axes.
+  The primary y-axis scale is always in `scale`; `scales`/`y_axes` carry the
+  full per-axis lists.
   """
 
-  alias EexCharts.{Legend, Scale, SVG}
+  alias EexCharts.{Config, Legend, Scale, SVG, TimeScale}
 
   defstruct w: 600,
             h: 350,
@@ -20,6 +25,10 @@ defmodule EexCharts.Layout do
             tick_placement: :on,
             horizontal: false,
             scale: nil,
+            scales: [],
+            y_axes: [],
+            x_scale: nil,
+            x_type: :category,
             legend: nil,
             title_h: 0
 
@@ -31,8 +40,19 @@ defmodule EexCharts.Layout do
     * `names` — series names (for legend sizing)
     * `n` — number of data points / categories
     * `{y_min, y_max}` — raw value range from the data
+
+  This 4-arity form is the single-y-axis, category-x entry point; it delegates
+  to `build/5` with one range and no x-value scale.
   """
   def build(cfg, names, n, {y_min, y_max}) do
+    build(cfg, names, n, [{y_min, y_max}], nil)
+  end
+
+  @doc """
+  Builds the layout given a list of per-y-axis `{min, max}` ranges and an
+  optional `{x_min, x_max}` range for a numeric/datetime x-axis.
+  """
+  def build(cfg, names, n, y_ranges, x_range) when is_list(y_ranges) do
     w = dim(cfg.chart.width, 600)
     h = dim(cfg.chart.height, 350)
     horizontal = get_in(cfg, [:plot_options, :bar, :horizontal]) == true && cfg.chart.type == :bar
@@ -41,37 +61,56 @@ defmodule EexCharts.Layout do
     title_h = if cfg.title.text, do: cfg.title.style.font_size + cfg.title.margin + 4, else: 0
     legend = Legend.measure(cfg, names, w, h)
 
-    scale =
-      Scale.nice_scale(y_min, y_max,
-        min: cfg.yaxis.min,
-        max: cfg.yaxis.max,
-        tick_amount: cfg.yaxis.tick_amount,
-        step_size: cfg.yaxis.step_size,
-        svg_height: if(horizontal, do: w, else: h)
-      )
+    y_axes = Config.yaxes(cfg)
+    svg_dim = if horizontal, do: w, else: h
 
-    value_labels = Enum.map(scale.ticks, &format_y_label(cfg, &1))
+    # Pair each axis with its range (falling back to the first range/axis when
+    # the caller supplied fewer of one than the other).
+    scales =
+      y_axes
+      |> Enum.with_index()
+      |> Enum.map(fn {axis, i} ->
+        {mn, mx} = Enum.at(y_ranges, i, hd(y_ranges))
+        axis_scale(axis, mn, mx, svg_dim)
+      end)
 
-    y_font = cfg.yaxis.labels.style.font_size
+    primary = hd(scales)
+
     x_font = cfg.xaxis.labels.style.font_size
-
     categories = cfg.xaxis.categories
 
-    # Left gutter: category labels when horizontal, value labels otherwise.
-    left_labels = if horizontal, do: Enum.map(categories, &to_string/1), else: value_labels
+    # ── Left / right gutters ────────────────────────────────────────────────
+    {left_axes, right_axes} =
+      y_axes
+      |> Enum.zip(scales)
+      |> Enum.with_index()
+      |> Enum.split_with(fn {{axis, _s}, _i} -> not axis.opposite end)
 
-    left_label_w =
-      if cfg.yaxis.labels.show and left_labels != [] do
-        left_labels
-        |> Enum.map(&text_width(&1, y_font))
-        |> Enum.max()
-        |> max(cfg.yaxis.labels.min_width)
-        |> min(cfg.yaxis.labels.max_width)
+    {left_label_w, left_title_w} =
+      if horizontal do
+        # Horizontal bars: the left gutter shows category labels, not values.
+        y_font = hd(y_axes).labels.style.font_size
+
+        w0 =
+          if hd(y_axes).labels.show and categories != [] do
+            categories
+            |> Enum.map(&text_width(to_string(&1), y_font))
+            |> Enum.max(fn -> 0 end)
+            |> max(hd(y_axes).labels.min_width)
+            |> min(hd(y_axes).labels.max_width)
+          else
+            0
+          end
+
+        {w0, if(hd(y_axes).title.text, do: hd(y_axes).title.style.font_size + 10, else: 0)}
       else
-        0
+        {axes_label_width(cfg, left_axes), axes_title_width(left_axes)}
       end
 
-    y_title_w = if cfg.yaxis.title.text, do: cfg.yaxis.title.style.font_size + 10, else: 0
+    {right_label_w, right_title_w} =
+      if horizontal,
+        do: {0, 0},
+        else: {axes_label_width(cfg, right_axes), axes_title_width(right_axes)}
 
     x_label_h =
       if cfg.xaxis.labels.show do
@@ -81,9 +120,15 @@ defmodule EexCharts.Layout do
         4
       end
 
-    grid_x = pad.left + y_title_w + left_label_w + if(left_label_w > 0, do: 10, else: 0)
+    grid_x = pad.left + left_title_w + left_label_w + if(left_label_w > 0, do: 10, else: 0)
     grid_y = pad.top + title_h + 12
-    right = pad.right + if(legend.position == :right, do: legend.w, else: 0)
+
+    legend_right = if legend.position == :right, do: legend.w, else: 0
+
+    right =
+      pad.right + legend_right + right_title_w + right_label_w +
+        if(right_label_w > 0, do: 10, else: 0)
+
     bottom_legend_h = if legend.position in [:bottom, :top], do: legend.h, else: 0
 
     {grid_y, bottom} =
@@ -93,20 +138,110 @@ defmodule EexCharts.Layout do
         {grid_y, pad.bottom + x_label_h + bottom_legend_h}
       end
 
+    grid_w = max(w - grid_x - right, 10)
+    grid_h = max(h - grid_y - bottom, 10)
+
+    x_scale = build_x_scale(cfg, x_range, grid_w)
+
     %__MODULE__{
       w: w,
       h: h,
       grid_x: grid_x,
       grid_y: grid_y,
-      grid_w: max(w - grid_x - right, 10),
-      grid_h: max(h - grid_y - bottom, 10),
+      grid_w: grid_w,
+      grid_h: grid_h,
       n: max(n, 1),
       tick_placement: cfg.xaxis.tick_placement,
       horizontal: horizontal,
-      scale: scale,
+      scale: primary,
+      scales: scales,
+      y_axes: y_axes,
+      x_scale: x_scale,
+      x_type: if(x_scale, do: x_scale.type, else: :category),
       legend: legend,
       title_h: title_h
     }
+  end
+
+  # Chooses the appropriate scale (linear/nice or logarithmic) for one y-axis.
+  defp axis_scale(axis, mn, mx, svg_dim) do
+    if axis.logarithmic do
+      Scale.log_scale(mn, mx, axis.log_base, axis.force_nice_scale)
+    else
+      Scale.nice_scale(mn, mx,
+        min: axis.min,
+        max: axis.max,
+        tick_amount: axis.tick_amount,
+        step_size: axis.step_size,
+        svg_height: svg_dim
+      )
+    end
+  end
+
+  defp axes_label_width(_cfg, []), do: 0
+
+  defp axes_label_width(cfg, axes_with_scales) do
+    axes_with_scales
+    |> Enum.map(fn {{axis, scale}, _i} ->
+      if axis.labels.show do
+        scale.ticks
+        |> Enum.map(fn t ->
+          text_width(format_y_label(cfg, axis, t), axis.labels.style.font_size)
+        end)
+        |> Enum.max(fn -> 0 end)
+        |> max(axis.labels.min_width)
+        |> min(axis.labels.max_width)
+      else
+        0
+      end
+    end)
+    |> Enum.sum()
+  end
+
+  defp axes_title_width([]), do: 0
+
+  defp axes_title_width(axes_with_scales) do
+    axes_with_scales
+    |> Enum.map(fn {{axis, _s}, _i} ->
+      if axis.title.text, do: axis.title.style.font_size + 10, else: 0
+    end)
+    |> Enum.sum()
+  end
+
+  # ── X value scale (numeric / datetime) ─────────────────────────────────────
+
+  defp build_x_scale(_cfg, nil, _grid_w), do: nil
+
+  defp build_x_scale(cfg, {x_min, x_max}, grid_w) do
+    case cfg.xaxis.type do
+      :datetime -> datetime_x_scale(cfg, x_min, x_max, grid_w)
+      _ -> numeric_x_scale(cfg, x_min, x_max, grid_w)
+    end
+  end
+
+  defp numeric_x_scale(cfg, x_min, x_max, grid_w) do
+    x_min = if is_number(cfg.xaxis.min), do: cfg.xaxis.min, else: x_min
+    x_max = if is_number(cfg.xaxis.max), do: cfg.xaxis.max, else: x_max
+    x_min = if is_number(cfg.xaxis.range), do: x_max - cfg.xaxis.range, else: x_min
+
+    ticks =
+      if is_number(cfg.xaxis.tick_amount),
+        do: round(cfg.xaxis.tick_amount),
+        else: max(round(grid_w / 150), 1)
+
+    {result, nmin, nmax} = Scale.linear_scale(x_min, x_max, ticks, cfg.xaxis.step_size)
+
+    labels = Enum.map(result, fn v -> %{value: v, label: SVG.fmt_value(v)} end)
+    %{type: :numeric, ticks: labels, nice_min: nmin, nice_max: nmax}
+  end
+
+  defp datetime_x_scale(cfg, x_min, x_max, grid_w) do
+    x_min = if is_number(cfg.xaxis.min), do: cfg.xaxis.min, else: x_min
+    x_max = if is_number(cfg.xaxis.max), do: cfg.xaxis.max, else: x_max
+
+    ticks = TimeScale.ticks(x_min, x_max, grid_w)
+    labels = Enum.map(ticks, fn t -> %{value: t.value, label: t.label} end)
+    %{type: :datetime, ticks: labels, nice_min: x_min, nice_max: x_max}
   end
 
   @doc "Pixel position of the center of category slot `i` on the category axis."
@@ -128,12 +263,35 @@ defmodule EexCharts.Layout do
     end
   end
 
-  @doc "Pixel y for a data value (vertical charts)."
-  def y_for(%__MODULE__{} = l, v) do
-    %{nice_min: min, nice_max: max} = l.scale
+  @doc "Pixel x for a numeric / datetime x value (charts with an x-value scale)."
+  def x_value_pos(%__MODULE__{x_scale: xs} = l, x) when is_map(xs) do
+    range = xs.nice_max - xs.nice_min
+
+    if range == 0,
+      do: l.grid_x + l.grid_w / 2,
+      else: l.grid_x + (x - xs.nice_min) / range * l.grid_w
+  end
+
+  @doc "Pixel y for a data value on the primary y-axis (vertical charts)."
+  def y_for(%__MODULE__{} = l, v), do: y_for(l, v, l.scale)
+
+  @doc "Pixel y for a data value on the given `scale` (log-aware)."
+  def y_for(%__MODULE__{} = l, v, %Scale{log: true, log_base: base} = scale) do
+    lb = :math.log(base)
+    lmin = safe_log(scale.nice_min, lb)
+    lmax = safe_log(scale.nice_max, lb)
+    range = lmax - lmin
+    lv = safe_log(v, lb)
+    l.grid_y + l.grid_h - (lv - lmin) / range * l.grid_h
+  end
+
+  def y_for(%__MODULE__{} = l, v, %{nice_min: min, nice_max: max}) do
     range = max - min
     l.grid_y + l.grid_h - (v - min) / range * l.grid_h
   end
+
+  defp safe_log(v, _lb) when not is_number(v) or v <= 0, do: 0.0
+  defp safe_log(v, lb), do: :math.log(v) / lb
 
   @doc "Pixel x for a data value (horizontal bar charts)."
   def x_for(%__MODULE__{} = l, v) do
@@ -159,18 +317,113 @@ defmodule EexCharts.Layout do
     String.length(to_string(text)) * font_size * 0.6
   end
 
-  @doc "Formats a y-axis tick label according to the config."
-  def format_y_label(cfg, v) do
-    cond do
-      is_function(cfg.yaxis.formatter, 1) ->
-        to_string(cfg.yaxis.formatter.(v))
+  @doc "Formats a y-axis tick label according to the primary y-axis config."
+  def format_y_label(cfg, v), do: format_y_label(cfg, cfg.yaxis, v)
 
-      is_integer(cfg.yaxis.decimals_in_float) and is_float(v) ->
-        :erlang.float_to_binary(v, decimals: cfg.yaxis.decimals_in_float)
+  @doc "Formats a y-axis tick label according to a specific axis map."
+  def format_y_label(_cfg, axis, v) do
+    cond do
+      is_function(axis.formatter, 1) ->
+        to_string(axis.formatter.(v))
+
+      is_integer(axis.decimals_in_float) and is_float(v) ->
+        :erlang.float_to_binary(v, decimals: axis.decimals_in_float)
 
       true ->
         SVG.fmt_value(v)
     end
+  end
+
+  @doc """
+  Parses a cartesian data point into `{x, y, z}` for slot index `j`.
+
+  Accepts a plain number (`y`; `x` defaults to the slot index — `j+1` for
+  value x-axes, `j` for category), an `[x, y]` / `[x, y, z]` list, or a map
+  with `:x`/`:y`/`:z` keys. Datetime x values are converted to unix ms.
+  """
+  def point(v, j, x_type) when is_number(v) do
+    x = if x_type in [:numeric, :datetime], do: j + 1, else: j
+    {x, v, nil}
+  end
+
+  def point([x, y], _j, x_type), do: {to_x(x, x_type), y, nil}
+  def point([x, y, z | _], _j, x_type), do: {to_x(x, x_type), y, z}
+
+  def point(%{} = m, j, x_type) do
+    x = m[:x] || m["x"]
+
+    x =
+      if is_nil(x),
+        do: if(x_type in [:numeric, :datetime], do: j + 1, else: j),
+        else: to_x(x, x_type)
+
+    {x, m[:y] || m["y"], m[:z] || m["z"]}
+  end
+
+  def point(_v, j, _x_type), do: {j, nil, nil}
+
+  @doc "Converts an x value to a number (unix ms for datetime axes)."
+  def to_x(v, :datetime), do: TimeScale.to_ms(v)
+  def to_x(v, _type) when is_number(v), do: v
+  def to_x(v, _type), do: TimeScale.to_ms(v)
+
+  @doc "The effective x-axis kind for a config: `:category`, `:numeric` or `:datetime`."
+  def x_type(cfg) do
+    cond do
+      cfg.xaxis.type == :datetime -> :datetime
+      cfg.xaxis.type == :numeric -> :numeric
+      cfg.chart.type in [:scatter, :bubble] -> :numeric
+      true -> :category
+    end
+  end
+
+  @doc "True when the x-axis is positioned by value rather than category slot."
+  def value_x?(cfg), do: x_type(cfg) != :category
+
+  @doc """
+  Resolves a series' `data` into `[{j, x, y, z}]` tuples using the config's
+  x-axis type. Plain-number data on a value x-axis takes its x from
+  `xaxis.categories` when those are provided, else its slot index (`j+1`).
+  """
+  def series_points(cfg, data) do
+    xt = x_type(cfg)
+    cats = cfg.xaxis.categories
+
+    data
+    |> Enum.with_index()
+    |> Enum.map(fn {v, j} ->
+      {x, y, z} = point(v, j, xt)
+
+      x =
+        if is_number(v) and cats != [] and xt in [:numeric, :datetime] do
+          to_x(Enum.at(cats, j), xt)
+        else
+          x
+        end
+
+      {j, x, y, z}
+    end)
+  end
+
+  @doc """
+  Index of the y-axis that a series binds to. Matches `series_name` first
+  (ApexCharts `seriesName`), then falls back to the series' own position,
+  then axis 0.
+  """
+  def axis_index_for(y_axes, s) do
+    named =
+      Enum.find_index(y_axes, fn a -> a.series_name && to_string(a.series_name) == s.name end)
+
+    cond do
+      is_integer(named) -> named
+      s.index < length(y_axes) -> s.index
+      true -> 0
+    end
+  end
+
+  @doc "The scale bound to a given series (for multiple y-axes)."
+  def scale_for_series(%__MODULE__{scales: scales} = l, s) do
+    Enum.at(scales, axis_index_for(l.y_axes, s), l.scale)
   end
 
   defp dim(v, _default) when is_number(v), do: v

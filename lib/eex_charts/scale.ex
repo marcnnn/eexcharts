@@ -47,9 +47,16 @@ defmodule EexCharts.Scale do
   # step to 1, 2, 5 or 10.
   @allowed_mag_msd [1, 1, 2, 5, 5, 5, 10, 10, 10, 10, 10]
 
-  defstruct ticks: [], nice_min: 0, nice_max: 0, step: 1
+  defstruct ticks: [], nice_min: 0, nice_max: 0, step: 1, log: false, log_base: 10
 
-  @type t :: %__MODULE__{ticks: [number], nice_min: number, nice_max: number, step: number}
+  @type t :: %__MODULE__{
+          ticks: [number],
+          nice_min: number,
+          nice_max: number,
+          step: number,
+          log: boolean,
+          log_base: number
+        }
 
   @doc """
   Computes a nice scale for the data range `[y_min, y_max]`.
@@ -167,6 +174,105 @@ defmodule EexCharts.Scale do
       nice_max: List.last(ticks_list),
       step: step
     }
+  end
+
+  @doc """
+  Logarithmic y-axis scale, ported from `Scales.js` `logarithmicScale` /
+  `logarithmicScaleNice`.
+
+  When `force_nice` is true, ticks land on exact powers of `base` bracketing
+  the range (`logarithmicScaleNice`); otherwise ticks are evenly spaced in log
+  space between `y_min` and `y_max` (`logarithmicScale`).
+
+  ApexCharts falls back to a linear `nice_scale/3` when the range is `<= 5`
+  (`invalidLogScale`); this mirrors that.
+  """
+  @spec log_scale(number, number, number, boolean) :: t
+  def log_scale(y_min, y_max, base \\ 10, force_nice \\ false) do
+    range = abs((y_max || 0) - (y_min || 0))
+
+    if not is_number(y_min) or not is_number(y_max) or range <= 5 do
+      nice_scale(y_min, y_max, [])
+    else
+      {ticks, nmin, nmax} =
+        if force_nice do
+          log_scale_nice(y_min, y_max, base)
+        else
+          log_scale_plain(y_min, y_max, base)
+        end
+
+      %__MODULE__{
+        ticks: Enum.map(ticks, &strip_number/1),
+        nice_min: nmin,
+        nice_max: nmax,
+        step: 1,
+        log: true,
+        log_base: base
+      }
+    end
+  end
+
+  defp log_scale_plain(y_min, y_max, base) do
+    y_max = if y_max <= 0, do: max(y_min, base), else: y_max
+    y_min = if y_min <= 0, do: min(y_max, base), else: y_min
+
+    lb = :math.log(base)
+    log_max = :math.log(y_max) / lb
+    log_min = :math.log(y_min) / lb
+    log_range = log_max - log_min
+    ticks = max(round(log_range), 1)
+    spacing = log_range / ticks
+
+    logs =
+      Enum.map(0..(ticks - 1), fn i -> :math.pow(base, log_min + i * spacing) end) ++
+        [:math.pow(base, log_max)]
+
+    {logs, y_min, y_max}
+  end
+
+  defp log_scale_nice(y_min, y_max, base) do
+    y_max = if y_max <= 0, do: max(y_min, base), else: y_max
+    y_min = if y_min <= 0, do: min(y_max, base), else: y_min
+
+    lb = :math.log(base)
+    log_max = ceil(:math.log(y_max) / lb + 1)
+    log_min = floor(:math.log(y_min) / lb)
+
+    logs = Enum.map(log_min..(log_max - 1), fn i -> :math.pow(base, i) end)
+    {logs, List.first(logs), List.last(logs)}
+  end
+
+  @doc """
+  Evenly-spaced linear ticks for the x-axis, ported from `Scales.js`
+  `linearScale`. Produces `ticks + 1` values from `x_min` in steps of
+  `range / ticks` (or the forced `step`). Returns `{result, nice_min,
+  nice_max}`.
+  """
+  @spec linear_scale(number, number, number, number | nil) :: {[number], number, number}
+  def linear_scale(x_min, x_max, ticks, step \\ nil)
+
+  def linear_scale(x, x, _ticks, _step), do: {[x], x, x}
+
+  def linear_scale(x_min, x_max, ticks, step) do
+    range = abs(x_max - x_min)
+
+    # A forced step is authoritative: derive the tick count from it so the last
+    # tick lands on (or just past) x_max rather than overshooting by ticks-worth.
+    {ticks, step} =
+      if is_number(step) and step > 0 do
+        {max(round(range / step), 1), step}
+      else
+        t = max(round(ticks), 1)
+        {t, range / t}
+      end
+
+    # Utils.preciseAddition + rounding to 2 decimals as ApexCharts does.
+    step = Float.round(step + 2.2e-16, 2)
+    step = if step == 0, do: range / ticks, else: step
+
+    result = Enum.map(0..ticks, fn i -> strip_number(x_min + i * step) end)
+
+    {result, List.first(result), List.last(result)}
   end
 
   defp build_ticks(y_min, y_max, step) do
