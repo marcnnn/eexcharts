@@ -97,4 +97,51 @@ defmodule EexCharts.ScaleTest do
     assert s.nice_min <= 0.001
     assert s.nice_max >= 0.009
   end
+
+  describe "log_scale/4" do
+    test "plain log scale spans powers of the base" do
+      s = Scale.log_scale(1, 10_000, 10, false)
+      assert s.log
+      assert s.log_base == 10
+      assert s.ticks == [1, 10, 100, 1000, 10_000]
+      assert s.nice_min == 1
+      assert s.nice_max == 10_000
+    end
+
+    test "nice log scale brackets the range with exact powers" do
+      s = Scale.log_scale(3, 8000, 10, true)
+      assert s.ticks == [1, 10, 100, 1000, 10_000]
+    end
+
+    test "supports a custom base" do
+      s = Scale.log_scale(1, 64, 2, false)
+      assert List.first(s.ticks) == 1
+      assert List.last(s.ticks) == 64
+      # 2^0..2^6 -> 7 ticks
+      assert length(s.ticks) == 7
+    end
+
+    test "falls back to a linear nice scale for small ranges (<= 5)" do
+      s = Scale.log_scale(1, 4, 10, false)
+      refute s.log
+    end
+  end
+
+  describe "linear_scale/4" do
+    test "produces evenly spaced ticks over the range" do
+      {result, nmin, nmax} = Scale.linear_scale(0, 10, 5)
+      assert result == [0, 2, 4, 6, 8, 10]
+      assert nmin == 0
+      assert nmax == 10
+    end
+
+    test "collapses to a single value when min == max" do
+      assert {[7], 7, 7} = Scale.linear_scale(7, 7, 5)
+    end
+
+    test "honors a forced step" do
+      {result, _, _} = Scale.linear_scale(0, 10, 5, 5)
+      assert result == [0, 5, 10]
+    end
+  end
 end

@@ -22,6 +22,7 @@ defmodule EexCharts.Config do
     |> deep_merge(type_defaults(type))
     |> deep_merge(opts)
     |> Map.update!(:chart, &Map.put(&1, :type, type))
+    |> EexCharts.Theme.apply(opts)
   end
 
   @doc "Deep-merges two nested maps; values in `override` win."
@@ -47,6 +48,7 @@ defmodule EexCharts.Config do
         offset_y: 0
       },
       colors: nil,
+      theme: %{mode: :light, palette: nil, monochrome: %{enabled: false}},
       annotations: %{xaxis: [], yaxis: [], points: []},
       title: %{
         text: nil,
@@ -102,9 +104,15 @@ defmodule EexCharts.Config do
         type: :category,
         categories: [],
         tick_placement: :on,
+        min: nil,
+        max: nil,
+        range: nil,
+        tick_amount: nil,
+        step_size: nil,
         labels: %{
           show: true,
           formatter: nil,
+          datetime_formatter: %{},
           style: %{colors: nil, font_size: 12, font_weight: 400}
         },
         axis_border: %{show: true, color: "#e0e0e0", height: 1},
@@ -112,6 +120,10 @@ defmodule EexCharts.Config do
       },
       yaxis: %{
         show: true,
+        opposite: false,
+        series_name: nil,
+        logarithmic: false,
+        log_base: 10,
         min: nil,
         max: nil,
         tick_amount: nil,
@@ -443,6 +455,24 @@ defmodule EexCharts.Config do
   end
 
   defp type_defaults(_), do: %{}
+
+  @doc """
+  Normalizes `cfg.yaxis` into a list of fully-populated axis maps.
+
+  ApexCharts allows `yaxis` to be a single map or a list of axis maps; each
+  raw axis is deep-merged over the default y-axis so every key is present.
+  """
+  def yaxes(cfg) do
+    base = defaults().yaxis
+
+    case cfg.yaxis do
+      list when is_list(list) -> Enum.map(list, &deep_merge(base, &1))
+      %{} = map -> [deep_merge(base, map)]
+    end
+  end
+
+  @doc "The primary (first) y-axis map — the one that owns the grid lines."
+  def yaxis(cfg), do: hd(yaxes(cfg))
 
   @doc "Resolves the color list, falling back to the default palette."
   def colors(cfg), do: cfg[:colors] || @palette
