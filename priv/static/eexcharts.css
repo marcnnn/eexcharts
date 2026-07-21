@@ -1,0 +1,95 @@
+/* EexCharts — tooltip and hover styles (modeled on ApexCharts). */
+
+.eexcharts {
+  position: relative;
+}
+
+.eexcharts-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  background: #fff;
+  color: #373d3f;
+  border: 1px solid #e3e3e3;
+  border-radius: 5px;
+  box-shadow: 2px 2px 6px -4px #999;
+  padding: 6px 10px;
+  white-space: nowrap;
+  z-index: 10;
+  font-family: Helvetica, Arial, sans-serif;
+  line-height: 1.6;
+}
+
+.eexcharts-tooltip[data-theme="dark"] {
+  background: rgba(30, 30, 30, 0.9);
+  color: #fff;
+  border-color: transparent;
+}
+
+.eexcharts-tooltip-active {
+  opacity: 1;
+}
+
+.eexcharts-tip-title {
+  font-weight: 600;
+  border-bottom: 1px solid #eee;
+  margin: -6px -10px 4px;
+  padding: 4px 10px;
+  background: #f8f8f8;
+}
+
+.eexcharts-tooltip[data-theme="dark"] .eexcharts-tip-title {
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom-color: #333;
+}
+
+.eexcharts-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.eexcharts-tip-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.eexcharts-tip-value {
+  font-weight: 600;
+}
+
+.eexcharts-crosshair {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.eexcharts-hover-marker {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.eexcharts-hover-marker.active {
+  opacity: 1;
+}
+
+.eexcharts-bar,
+.eexcharts-slice {
+  transition: filter 0.12s ease, opacity 0.12s ease;
+}
+
+.eexcharts-bar:hover,
+.eexcharts-slice:hover {
+  filter: brightness(0.92);
+}
+
+.eexcharts-datalabel {
+  pointer-events: none;
+}
