@@ -119,6 +119,7 @@ defmodule EexCharts.Renderer do
         if(bar?, do: zones, else: []),
         el("g", %{class: "eexcharts-inner"}, series_io),
         data_labels(cfg, series, l),
+        EexCharts.Annotations.render(cfg, l),
         axes(cfg, l, categories),
         Legend.render(l.legend, cfg, l,
           hidden: hidden,
@@ -202,14 +203,16 @@ defmodule EexCharts.Renderer do
     end
   end
 
-  defp categories(cfg, n) do
+  @doc false
+  def categories(cfg, n) do
     case cfg.xaxis.categories do
       [] -> Enum.map(1..max(n, 1), &to_string/1)
       cats -> Enum.map(cats, &to_string/1)
     end
   end
 
-  defp svg_open(cfg, l, id, children) do
+  @doc false
+  def svg_open(cfg, l, id, children) do
     el(
       "svg",
       %{
@@ -224,7 +227,8 @@ defmodule EexCharts.Renderer do
     )
   end
 
-  defp background(cfg, l) do
+  @doc false
+  def background(cfg, l) do
     if cfg.chart.background not in [nil, ""] do
       el("rect", %{x: 0, y: 0, width: l.w, height: l.h, fill: cfg.chart.background})
     else
@@ -232,7 +236,8 @@ defmodule EexCharts.Renderer do
     end
   end
 
-  defp title(cfg, l) do
+  @doc false
+  def title(cfg, l) do
     if cfg.title.text do
       style = cfg.title.style
 
@@ -754,7 +759,8 @@ defmodule EexCharts.Renderer do
     end
   end
 
-  defp tooltip_row(color, label, value) do
+  @doc false
+  def tooltip_row(color, label, value) do
     el("div", %{class: "eexcharts-tip-row"}, [
       el("span", %{class: "eexcharts-tip-marker", style: "background:#{color}"}, ""),
       el("span", %{class: "eexcharts-tip-label"}, [esc(label), ": "]),
@@ -762,7 +768,8 @@ defmodule EexCharts.Renderer do
     ])
   end
 
-  defp tooltip_container(cfg, tips) do
+  @doc false
+  def tooltip_container(cfg, tips) do
     el(
       "div",
       %{
@@ -785,14 +792,16 @@ defmodule EexCharts.Renderer do
     end
   end
 
-  defp format_tooltip_x(cfg, title) do
+  @doc false
+  def format_tooltip_x(cfg, title) do
     case cfg.tooltip.x_formatter do
       f when is_function(f, 1) -> to_string(f.(title))
       _ -> title
     end
   end
 
-  defp format_tooltip_y(cfg, v) do
+  @doc false
+  def format_tooltip_y(cfg, v) do
     case cfg.tooltip.y_formatter do
       f when is_function(f, 1) -> to_string(f.(v))
       _ -> fmt_value(v)
@@ -904,7 +913,8 @@ defmodule EexCharts.Renderer do
 
   # ── Container ────────────────────────────────────────────────────────────
 
-  defp container(cfg, params, id, svg, tooltips) do
+  @doc false
+  def container(cfg, params, id, svg, tooltips) do
     max_w = if is_number(cfg.chart.width), do: "max-width:#{fmt(cfg.chart.width)}px;", else: ""
 
     el(

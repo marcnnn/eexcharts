@@ -47,6 +47,7 @@ defmodule EexCharts.Config do
         offset_y: 0
       },
       colors: nil,
+      annotations: %{xaxis: [], yaxis: [], points: []},
       title: %{
         text: nil,
         align: :left,
