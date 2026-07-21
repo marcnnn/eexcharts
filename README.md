@@ -120,6 +120,38 @@ end
 `%{"id" => id, "index" => index}` to the server on hover, if you want
 server-side reactions (e.g. syncing a table row highlight).
 
+### Legend toggling
+
+Legend items are clickable too — ApexCharts' series toggle, done the
+LiveView way (the hidden set lives in your assigns):
+
+```heex
+<EexCharts.chart
+  id="sales"
+  type={:line}
+  series={@series}
+  on_legend_click="toggle-series"
+  hidden_series={@hidden}
+/>
+```
+
+```elixir
+def handle_event("toggle-series", %{"series" => s}, socket) do
+  i = String.to_integer(s)
+
+  hidden =
+    if i in socket.assigns.hidden,
+      do: List.delete(socket.assigns.hidden, i),
+      else: [i | socket.assigns.hidden]
+
+  {:noreply, assign(socket, hidden: hidden)}
+end
+```
+
+Hidden series disappear from the chart and tooltips, the axes rescale to
+the remaining data, the other series keep their colors, and the legend item
+stays visible but dimmed — same behavior as ApexCharts' legend toggle.
+
 Because the chart is a pure function of its assigns, updating `@series`
 re-renders the SVG through the normal LiveView diff — that's all there is to
 "animations".
