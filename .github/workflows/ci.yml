@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Fast gate: unit tests + SVG golden snapshots. No browser, no server.
+  test:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          # Matches .tool-versions.
+          otp-version: "28.5.0.1"
+          elixir-version: "1.19.5"
+
+      - name: Restore deps/_build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+
+      - run: mix deps.get
+      - run: mix deps.compile
+
+      # SVG gate + unit tests (excludes the browser-driven :visual suite).
+      - run: mix test --exclude visual
+
+  # Fuller-fidelity gate: real pixel screenshots via phoenix_test_playwright.
+  # Runs in the official Playwright image so fonts/rendering match the committed
+  # baselines (see test/visual_test.exs "Determinism").
+  visual:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.49.0-noble
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28.5.0.1"
+          elixir-version: "1.19.5"
+
+      - name: Restore deps/_build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-visual-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-visual-
+
+      - run: mix deps.get
+      - run: mix deps.compile
+
+      # phoenix_test_playwright drives the Node Playwright driver from ./assets.
+      # Install it and a matching Chromium (browsers ship in the image, but this
+      # keeps the npm package and browser build in lockstep).
+      - name: Install Playwright
+        run: |
+          npm --prefix assets install playwright
+          npx --prefix assets playwright install chromium
+
+      # Baselines in test/visual/baseline/ are seeded once by running this same
+      # job with UPDATE=1 (which sets no baseline -> assert_screenshot saves the
+      # current screenshot) and committing the result. Thereafter this asserts.
+      - name: Visual tests
+        run: mix test --only visual
+
+      - name: Upload actual + diff artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-artifacts
+          path: |
+            test/visual/actual/
+            test/visual/baseline/__diff__/
+          if-no-files-found: ignore

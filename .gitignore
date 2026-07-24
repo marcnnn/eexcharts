@@ -22,3 +22,7 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 eexcharts-*.tar
 
+
+# Visual test artifacts (baselines are committed; actual + diffs are not)
+/test/visual/actual/
+**/__diff__/

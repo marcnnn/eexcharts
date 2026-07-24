@@ -175,9 +175,54 @@ returns safe HTML for controllers, static pages, or emails — no JS involved.
 ## Development
 
 ```sh
-mix test
-mix run dev/preview.exs   # writes dev/preview.html, a visual gallery
+mix test                  # unit tests + SVG golden snapshots (fast, no browser)
+mix run dev/preview.exs    # writes dev/preview.html, a static visual gallery
+mix dev                    # storybook catalog at http://localhost:4444/storybook
 ```
+
+All chart examples live in one place — `Dev.ChartExamples.all/0`
+(`dev/chart_examples.ex`) — shared by the preview gallery, the storybook
+stories, and both snapshot test layers, so there's no drift.
+
+### Storybook catalog
+
+`mix dev` boots a dev-only standalone Phoenix server (nothing under `dev/` ships
+in the Hex package) hosting a [phoenix_storybook](https://hex.pm/packages/phoenix_storybook)
+catalog with one browsable variation per chart. The catalog registers the real
+`EexCharts` hook, so hover tooltips and legend toggles work there too.
+
+### Visual regression testing
+
+Two layers guard against visual regressions:
+
+**1. SVG golden snapshots** (`test/svg_snapshot_test.exs`) — fast and
+browserless, part of the normal `mix test`. Each example is rendered to SVG and
+compared byte-for-byte against a committed golden in `test/snapshots/`. When a
+change to the output is intentional, regenerate the goldens:
+
+```sh
+EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/svg_snapshot_test.exs
+```
+
+**2. Pixel screenshots** (`test/visual_test.exs`, tagged `:visual`, excluded by
+default) — real headless-Chromium screenshots via
+[phoenix_test_playwright](https://hex.pm/packages/phoenix_test_playwright),
+catching font/CSS regressions the SVG diff can't see. They need the Playwright
+driver + a browser:
+
+```sh
+npm --prefix assets install playwright
+npx --prefix assets playwright install chromium
+mix test --only visual        # asserts against test/visual/baseline/
+```
+
+`assert_screenshot/3` saves a baseline on first run and compares thereafter
+(diffs land in `test/visual/baseline/__diff__/`). Because pixel output depends
+on font rendering, **baselines must be generated in the same environment they're
+checked against** — the CI `visual` job runs inside the official
+`mcr.microsoft.com/playwright` image (see `.github/workflows/ci.yml`), which is
+where the committed baselines are seeded (`mix test --only visual` with the
+baseline deleted).
 
 ## License
 
