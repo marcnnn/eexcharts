@@ -15,6 +15,13 @@ defmodule EexCharts.SVG do
     ["<", tag, attrs_io(attrs), ">", children, "</", tag, ">"]
   end
 
+  # Maps have no defined iteration order (and Erlang's varies across VM runs),
+  # so sort map attributes by name for deterministic, stable output. Keyword
+  # lists keep their given order.
+  defp attrs_io(attrs) when is_map(attrs) do
+    attrs |> Enum.sort_by(fn {k, _v} -> attr_name(k) end) |> attrs_io()
+  end
+
   defp attrs_io(attrs) do
     for {k, v} <- attrs, v != nil and v != false do
       [" ", attr_name(k), "=\"", attr_value(v), "\""]

@@ -66,7 +66,23 @@ defmodule EexCharts do
 
   attr(:type, :atom,
     default: :line,
-    values: [:line, :area, :bar, :pie, :donut],
+    values: [
+      :line,
+      :area,
+      :bar,
+      :pie,
+      :donut,
+      :scatter,
+      :bubble,
+      :radial_bar,
+      :polar_area,
+      :radar,
+      :heatmap,
+      :treemap,
+      :candlestick,
+      :box_plot,
+      :range_bar
+    ],
     doc: "chart type"
   )
 
