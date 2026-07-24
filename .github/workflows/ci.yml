@@ -50,6 +50,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The Playwright image is minimal and ships without unzip, which
+      # setup-beam needs to unpack the Elixir precompiled archive.
+      - name: Install unzip (required by setup-beam)
+        run: apt-get update && apt-get install -y unzip
+
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "28.5.0.1"
