@@ -44,6 +44,9 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.49.0-noble
     env:
       MIX_ENV: test
+      # erlef/setup-beam can't auto-detect the OS inside a container; the
+      # Playwright "noble" image is Ubuntu 24.04.
+      ImageOS: ubuntu24
     steps:
       - uses: actions/checkout@v4
 
