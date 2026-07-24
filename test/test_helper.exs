@@ -14,4 +14,9 @@ if :visual in (ExUnit.configuration()[:include] || []) do
       ],
       strategy: :one_for_one
     )
+
+  # phoenix_test_playwright has no OTP `mod:`, so its browser pool
+  # (:default_pool, which every :visual test checks out in setup_all) is not
+  # started automatically — start it here, only when the visual suite runs.
+  {:ok, _} = PhoenixTest.Playwright.Supervisor.start_link()
 end
