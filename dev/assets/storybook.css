@@ -1,0 +1,25 @@
+/* Dev/test-only storybook CSS (served straight from source by Dev.Endpoint). */
+
+/* Reuse the published tooltip/hover styles verbatim. */
+@import url("/eexcharts/eexcharts.css");
+
+/*
+ * Pin a single font family everywhere the chart draws text so pixel
+ * screenshots are stable across machines. Baselines are still generated inside
+ * the official Playwright Docker image (see test/visual_test.exs), but pinning
+ * the family keeps local runs from drifting on font substitution.
+ */
+body,
+.eexcharts,
+.eexcharts-tooltip,
+.eexcharts-svg text {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Give each isolated variation iframe a little breathing room. */
+.psb-sandbox,
+body {
+  margin: 0;
+  padding: 8px;
+  background: #ffffff;
+}
