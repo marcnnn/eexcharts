@@ -2,7 +2,7 @@ defmodule EexCharts.MixProject do
   use Mix.Project
 
   @version "0.1.0"
-  @source_url "https://github.com/marcnickert/eexcharts"
+  @source_url "https://github.com/marcnnn/eexcharts"
 
   def project do
     [
