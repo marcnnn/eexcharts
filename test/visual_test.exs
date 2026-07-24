@@ -55,12 +55,14 @@ defmodule EexCharts.VisualTest do
       |> visit(iframe_path("c1"))
       |> assert_has(".eexcharts")
       # The hook listens for pointermove on the container and reveals the
-      # tooltip for the hovered category; hovering the first data marker should
-      # add the active class.
+      # tooltip for the hovered category. Hover the transparent per-category
+      # hover zone (one `.eexcharts-zone` rect per category, so `data-j='0'` is
+      # unique here — the bare `[data-j='0']` also matches the per-series
+      # markers and the tooltip div, which trips Playwright's strict mode).
       |> unwrap(fn %{frame_id: frame_id} ->
         {:ok, _} =
           PlaywrightEx.Frame.hover(frame_id,
-            selector: ".eexcharts [data-j='0']",
+            selector: ".eexcharts .eexcharts-zone[data-j='0']",
             timeout: timeout()
           )
       end)
