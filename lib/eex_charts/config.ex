@@ -14,6 +14,18 @@ defmodule EexCharts.Config do
   def palette, do: @palette
 
   @doc """
+  The application-wide default for `theme.mode`.
+
+  A Phoenix app with daisyUI set up (the default since Phoenix 1.8) opts every
+  chart into daisyUI theming with one line in `config/config.exs`:
+
+      config :eexcharts, theme_mode: :daisy
+
+  Per-chart `%{theme: %{mode: ...}}` options still win.
+  """
+  def theme_mode, do: Application.get_env(:eexcharts, :theme_mode, :light)
+
+  @doc """
   Builds the effective config for a chart type (`:line`, `:area`, `:bar`,
   `:pie`, `:donut`) by deep-merging user options over the defaults.
   """
@@ -48,7 +60,7 @@ defmodule EexCharts.Config do
         offset_y: 0
       },
       colors: nil,
-      theme: %{mode: :light, palette: nil, monochrome: %{enabled: false}},
+      theme: %{mode: theme_mode(), palette: nil, monochrome: %{enabled: false}},
       annotations: %{xaxis: [], yaxis: [], points: []},
       title: %{
         text: nil,
