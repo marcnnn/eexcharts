@@ -10,6 +10,11 @@ defmodule EexCharts.Scale do
 
   @js_precision 1.0e-11
 
+  # Hard ceiling on the intervals a forced step may produce. Far above any
+  # axis anyone can read; it exists only so a pathological step cannot build
+  # a tick list unboundedly.
+  @max_intervals 500
+
   # niceScaleDefaultTicks from Scales.js — values with many divisors,
   # indexed by round(max_ticks / 2).
   @default_ticks [
@@ -79,7 +84,10 @@ defmodule EexCharts.Scale do
     got_min = is_number(opts[:min])
     got_max = is_number(opts[:max])
     got_tick_amount = is_number(opts[:tick_amount])
-    got_step_size = is_number(opts[:step_size])
+    # A non-positive forced step cannot produce ticks: zero divides by zero,
+    # and a negative one walks away from the range forever. Treat it as unset
+    # and fall back to the computed nice step.
+    got_step_size = is_number(opts[:step_size]) and opts[:step_size] > 0
 
     y_min = if got_min, do: opts[:min], else: y_min
     y_max = if got_max, do: opts[:max], else: y_max
@@ -166,6 +174,7 @@ defmodule EexCharts.Scale do
         {step, tiks}
       end
 
+    step = clamp_step(step, abs(y_max - y_min))
     ticks_list = build_ticks(y_min, y_max, step)
 
     %__MODULE__{
@@ -266,14 +275,26 @@ defmodule EexCharts.Scale do
         {t, range / t}
       end
 
-    # Utils.preciseAddition + rounding to 2 decimals as ApexCharts does.
-    step = Float.round(step + 2.2e-16, 2)
+    # Utils.preciseAddition, then 7 significant digits to clear float drift.
+    # A fixed 2 decimals truncates any range under ~0.1 - the step collapses
+    # and the axis stops short of x_max, drawing points outside the grid.
+    step = strip_number(step + 2.2e-16)
     step = if step == 0, do: range / ticks, else: step
 
     result = Enum.map(0..ticks, fn i -> strip_number(x_min + i * step) end)
 
     {result, List.first(result), List.last(result)}
   end
+
+  # A forced step far smaller than the range would iterate essentially
+  # forever. Widen it to something the axis could actually draw instead of
+  # handing back a list the caller cannot use.
+  defp clamp_step(step, range) when step > 0 and range / step > @max_intervals,
+    do: range / @max_intervals
+
+  defp clamp_step(step, _range), do: step
+
+  defp build_ticks(y_min, _y_max, step) when step <= 0, do: [strip_number(y_min)]
 
   defp build_ticks(y_min, y_max, step) do
     err = step * @js_precision

@@ -58,15 +58,10 @@ mix dev                      # storybook at http://localhost:4004
   output change is intentional.
 - `mix test --only visual` — headless-Chromium screenshot diffs. Baselines are
   environment-sensitive; see the README.
-- `mix test --include pending` — includes the known-failing tests in
-  `test/edge_cases_test.exs`.
 
-### The `:pending` tag
+### Edge cases
 
-`test/edge_cases_test.exs` holds one test per confirmed-but-unfixed defect,
-tagged `@tag :pending` and excluded from the default run. Each corresponds to a
-tracked issue. Closing an issue means: delete its `@tag :pending` line, make the
-test pass, and move its row in `docs/KNOWN_ISSUES.md` to *fixed*.
-
-Guard tests in the same file are **not** tagged — they assert edge-case behavior
-that is correct today and easy to break, and they must stay green.
+`test/edge_cases_test.exs` is the boundary-condition suite: pathological option
+values, degenerate data, and awkward ranges. It runs as part of `mix test` and
+every case must stay green. When you find a new defect, add the failing test
+there first and record it in `docs/KNOWN_ISSUES.md`.

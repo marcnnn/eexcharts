@@ -648,9 +648,7 @@ defmodule EexCharts.Renderer do
           cond do
             l.horizontal and position == :center -> {r.x + r.w / 2, r.y + r.h / 2}
             l.horizontal -> {r.x + r.w - 10, r.y + r.h / 2}
-            position == :center -> {r.x + r.w / 2, r.y + r.h / 2}
-            r.positive -> {r.x + r.w / 2, r.y + dl.style.font_size}
-            true -> {r.x + r.w / 2, r.y + r.h - 4}
+            true -> bar_label_pos(position, r, dl)
           end
 
         el(
@@ -671,6 +669,13 @@ defmodule EexCharts.Renderer do
 
     el("g", %{class: "eexcharts-datalabels"}, labels)
   end
+
+  # For a vertical bar the position names an edge of the rect, not the end the
+  # value sits at. The top edge of a bar hanging below zero is the zero line,
+  # so :top and :bottom stay distinct on either side of zero.
+  defp bar_label_pos(:center, r, _dl), do: {r.x + r.w / 2, r.y + r.h / 2}
+  defp bar_label_pos(:bottom, r, _dl), do: {r.x + r.w / 2, r.y + r.h - 4}
+  defp bar_label_pos(_top, r, dl), do: {r.x + r.w / 2, r.y + dl.style.font_size}
 
   defp point_data_labels(cfg, series, l) do
     dl = cfg.data_labels

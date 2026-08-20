@@ -65,16 +65,43 @@ defmodule EexCharts.TimeScale do
   as ApexCharts does via `svgWidth / 150`).
   """
   def ticks(min_ms, max_ms, grid_width) when max_ms > min_ms do
+    # Bounds can arrive as floats (a user-supplied `xaxis.min`, a computed
+    # range). Everything below indexes the calendar in whole milliseconds, so
+    # normalize once here rather than guarding every generator.
+    {min_ms, max_ms} = {round(min_ms), round(max_ms)}
+
     span_days = (max_ms - min_ms) / @ms_per_day
     unit = determine_unit(span_days)
     target = max(2, round(grid_width / 150))
 
     unit
     |> generate(min_ms, max_ms, target)
-    |> Enum.map(fn ms -> %{value: ms, unit: unit, label: format_date(ms, @formats[unit])} end)
+    |> label_ticks(unit)
   end
 
   def ticks(_min, _max, _w), do: []
+
+  # Sub-day ticks are labelled HH:mm, which says nothing about *which* day a
+  # point belongs to once the range crosses midnight. Promote the first tick
+  # of a new day to a date label. The very first tick keeps its time - there
+  # is no previous day for it to contrast with.
+  defp label_ticks(values, unit) when unit in [:hour, :minute, :second] do
+    values
+    |> Enum.map_reduce(nil, fn ms, prev ->
+      date = ms |> DateTime.from_unix!(:millisecond) |> DateTime.to_date()
+      label = format_date(ms, sub_day_format(unit, prev, date))
+      {%{value: ms, unit: unit, label: label}, date}
+    end)
+    |> elem(0)
+  end
+
+  defp label_ticks(values, unit) do
+    Enum.map(values, &%{value: &1, unit: unit, label: format_date(&1, @formats[unit])})
+  end
+
+  defp sub_day_format(unit, nil, _date), do: @formats[unit]
+  defp sub_day_format(unit, same, same), do: @formats[unit]
+  defp sub_day_format(_unit, _prev, _date), do: @formats[:day]
 
   # ── Interval selection (TimeScale.determineInterval) ──────────────────────
 

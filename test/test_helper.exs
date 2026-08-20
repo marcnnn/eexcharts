@@ -1,10 +1,7 @@
 # Visual (browser) tests are excluded by default; run them with
 # `mix test --only visual` (see test/visual_test.exs). The SVG golden gate and
 # the unit tests need neither a browser nor a running server.
-#
-# `:pending` marks the known-failing tests in test/edge_cases_test.exs — one per
-# tracked defect. Run them with `mix test --include pending`.
-ExUnit.start(exclude: [:visual, :pending])
+ExUnit.start(exclude: [:visual])
 
 # Boot the storybook endpoint only when the visual suite is actually included,
 # so the everyday `mix test` stays serverless.

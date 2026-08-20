@@ -3,14 +3,12 @@ defmodule EexCharts.EdgeCasesTest do
   Boundary-condition tests: pathological option values, degenerate data, and
   ranges small or awkward enough to break tick generation.
 
-  Two kinds of test live here:
+  Two kinds of test live here, and both must stay green:
 
-    * `@tag :pending` — a confirmed defect that is not fixed yet. Excluded from
-      `mix test`; run with `mix test --include pending`. Closing the tracked
-      issue means deleting the tag and making the test pass.
+    * **regressions** — each one reproduced a real defect through the public
+      API before it was fixed, and fails again if the fix is undone.
 
-    * untagged **guard** tests — behavior that is currently correct and easy to
-      break. They must stay green.
+    * **guard** tests — behavior that is correct and easy to break.
 
   See `docs/KNOWN_ISSUES.md` for what each case covers.
   """
@@ -43,18 +41,18 @@ defmodule EexCharts.EdgeCasesTest do
   end
 
   defp data_labels(html) do
-    Regex.scan(~r/<text ([^>]*class="eexcharts-datalabel")[^>]*>(-?[\d.]+)</, html)
+    Regex.scan(~r/<text ([^>]*class="eexcharts-datalabel"[^>]*)>(-?[\d.]+)</, html)
     |> Enum.map(fn [_, attrs, value] ->
-      {value, Regex.run(~r/ y="(-?[\d.]+)"/, attrs) |> List.last() |> String.to_float()}
+      {y, ""} = Regex.run(~r/ y="(-?[\d.]+)"/, attrs) |> List.last() |> Float.parse()
+      {value, y}
     end)
   end
 
   # ──────────────────────────────────────────────────────────────────────────
-  # Confirmed defects (pending)
+  # Regressions — each of these was a real defect. Keep them fixed.
   # ──────────────────────────────────────────────────────────────────────────
 
   describe "a forced y-axis step_size is not validated" do
-    @tag :pending
     test "step_size: 0 renders instead of raising" do
       assert {:ok, svg} =
                within(2_000, fn ->
@@ -67,7 +65,6 @@ defmodule EexCharts.EdgeCasesTest do
       assert svg =~ "eexcharts-svg"
     end
 
-    @tag :pending
     test "negative step_size renders instead of raising or spinning" do
       assert {:ok, svg} =
                within(2_000, fn ->
@@ -80,7 +77,6 @@ defmodule EexCharts.EdgeCasesTest do
       assert svg =~ "eexcharts-svg"
     end
 
-    @tag :pending
     test "a step_size far smaller than the range terminates with a bounded tick count" do
       assert {:ok, scale} =
                within(2_000, fn ->
@@ -94,7 +90,6 @@ defmodule EexCharts.EdgeCasesTest do
   end
 
   describe "small numeric x ranges" do
-    @tag :pending
     test "x-axis labels stay distinguishable for very small values" do
       labels =
         html("s", :scatter, [%{name: "A", data: [[0.00001, 1], [0.00002, 2], [0.00003, 3]]}], [])
@@ -104,7 +99,6 @@ defmodule EexCharts.EdgeCasesTest do
       assert Enum.uniq(labels) == labels, "x labels collapsed to duplicates: #{inspect(labels)}"
     end
 
-    @tag :pending
     test "linear_scale reaches x_max when the range is small" do
       {_ticks, _min, nice_max} = Scale.linear_scale(0, 0.07, 5, nil)
 
@@ -113,7 +107,6 @@ defmodule EexCharts.EdgeCasesTest do
       assert nice_max >= 0.07
     end
 
-    @tag :pending
     test "fmt_value keeps enough precision to distinguish small axis values" do
       formatted = Enum.map([0.00001, 0.00002, 0.00003], &SVG.fmt_value/1)
       assert Enum.uniq(formatted) == formatted
@@ -133,13 +126,11 @@ defmodule EexCharts.EdgeCasesTest do
       |> Map.new()
     end
 
-    @tag :pending
     test ":top and :bottom place labels differently" do
       refute bar_labels(:top) == bar_labels(:bottom),
              "position is ignored: :top and :bottom produce identical output"
     end
 
-    @tag :pending
     test "position: :top puts a negative bar's label at its top (zero) edge" do
       top = bar_labels(:top)
       center = bar_labels(:center)
@@ -153,7 +144,6 @@ defmodule EexCharts.EdgeCasesTest do
   end
 
   describe "datetime x-axis" do
-    @tag :pending
     test "tolerates non-integer millisecond bounds" do
       min = TimeScale.to_ms(~D[2026-02-20]) + 0.5
 
@@ -163,7 +153,6 @@ defmodule EexCharts.EdgeCasesTest do
       assert is_list(ticks)
     end
 
-    @tag :pending
     test "hour ticks crossing midnight carry the date" do
       # 20:00 Feb 28 → 04:00 Mar 1 is labelled HH:mm throughout, so the day
       # change is invisible and 00:00 is ambiguous. A tick that opens a new day

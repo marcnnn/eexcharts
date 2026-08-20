@@ -66,16 +66,24 @@ defmodule EexCharts.SVG do
   def fmt_value(v) when is_integer(v), do: Integer.to_string(v)
 
   def fmt_value(v) when is_float(v) do
-    rounded = EexCharts.Scale.strip_number(Float.round(v, 4))
+    decimals = value_decimals(v)
+    rounded = EexCharts.Scale.strip_number(Float.round(v, decimals))
 
     if is_integer(rounded) do
       Integer.to_string(rounded)
     else
-      :erlang.float_to_binary(rounded * 1.0, [{:decimals, 4}, :compact])
+      :erlang.float_to_binary(rounded * 1.0, [{:decimals, decimals}, :compact])
     end
   end
 
   def fmt_value(v), do: to_string(v)
+
+  # Four decimals covers ordinary data, but anything below a thousandth
+  # rounds away: at 1e-5 every axis label collapses to "0". Keep four
+  # significant digits down there; :compact trims what the value doesn't use.
+  defp value_decimals(v) when v == 0.0, do: 4
+  defp value_decimals(v) when abs(v) >= 0.001, do: 4
+  defp value_decimals(v), do: min(3 - floor(:math.log10(abs(v))), 15)
 
   @doc "SVG path move command."
   def move(x, y), do: ["M ", fmt(x), " ", fmt(y)]

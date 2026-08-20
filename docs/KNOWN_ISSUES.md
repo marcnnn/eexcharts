@@ -3,27 +3,34 @@
 A boundary-condition audit of this port: pathological option values, degenerate
 data, and ranges small or awkward enough to break tick generation. Every entry
 below was reproduced — or refuted — against this code, and each is pinned by a
-test in [`test/edge_cases_test.exs`](../test/edge_cases_test.exs).
+test in [`test/edge_cases_test.exs`](../test/edge_cases_test.exs), which runs as
+part of `mix test`.
 
-## Confirmed defects
+**Open: none.** All six defects found by the audit are fixed.
 
-Each has a failing test (`@tag :pending`, excluded from `mix test`; run with
-`mix test --include pending`).
+## Fixed defects
 
-| # | Defect | Affected code | Test |
-| --- | --- | --- | --- |
-| 1 | A forced `yaxis.step_size` is never validated: `0` raises `ArithmeticError`, a negative value raises or spins, and a step far smaller than the range builds ticks unboundedly (0…1e6 at step 1e-6 never returns). Renders from the public component API, so a user-supplied option can crash or hang a LiveView process. | `lib/eex_charts/scale.ex:134` (`step_size` path), `build_ticks/3` | `forced y-axis step_size is not validated` (3 cases) |
-| 2 | Numeric x-axis labels collapse to `"0"` for small values, so every tick reads the same. A scatter chart over x ∈ [1e-5, 3e-5] renders five identical `0` labels. | `lib/eex_charts/svg.ex:68` (`fmt_value/1` rounds to 4 decimals), used by `lib/eex_charts/layout.ex:234` | `x-axis labels stay distinguishable…`, `fmt_value keeps enough precision…` |
-| 3 | `Scale.linear_scale/4` rounds the step to 2 decimals, so a small x range loses its last tick and the axis stops short of the data: 0…0.07 yields a `nice_max` of 0.05, and points above it are drawn outside the grid. | `lib/eex_charts/scale.ex:270` | `linear_scale reaches x_max when the range is small` |
-| 4 | `plot_options.bar.data_labels.position` only honours `:center`; `:top` and `:bottom` are identical. Negative bars get their label at the value end (below the bar) in every mode. | `lib/eex_charts/renderer.ex:647` (`bar_data_labels/3`) | `:top and :bottom place labels differently`, `position: :top puts a negative bar's label at its top (zero) edge` |
-| 5 | `TimeScale.ticks/3` raises `ArithmeticError` on non-integer millisecond bounds, because `ceil_div/2` calls `Kernel.div/2`. Reachable from the public API via a float `xaxis.min`. | `lib/eex_charts/time_scale.ex:170` | `tolerates non-integer millisecond bounds` |
-| 6 | A datetime chart crossing midnight gives no date context: hour ticks are labelled `HH:mm` only, so `20:00 … 00:00 … 04:00` never says which day a point belongs to. The first tick of a new day should be promoted to a date label; this port emits unit-uniform labels instead. | `lib/eex_charts/time_scale.ex:74` | `hour ticks crossing midnight carry the date` |
+Each was reproduced through the public API first, then fixed. The test that
+reproduced it is now a regression test.
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 1 | A forced `yaxis.step_size` was never validated: `0` raised `ArithmeticError`, a negative value raised or spun, and a step far smaller than the range built ticks unboundedly (0…1e6 at step 1e-6 never returned). Renders from the public component API, so a user-supplied option could crash or hang a LiveView process. | `scale.ex` — a non-positive `step_size` is treated as unset and falls back to the computed nice step; `clamp_step/2` widens any step that would exceed `@max_intervals`; `build_ticks/3` returns a single tick rather than iterating on a non-positive step. |
+| 2 | Numeric x-axis labels collapsed to `"0"` for small values, so every tick read the same. A scatter chart over x ∈ [1e-5, 3e-5] rendered five identical `0` labels. | `svg.ex` — `fmt_value/1` keeps four *significant* digits below a thousandth instead of a flat four decimals. Values ≥ 0.001 format exactly as before. |
+| 3 | `Scale.linear_scale/4` rounded the step to 2 decimals, so a small x range lost its last tick and the axis stopped short of the data: 0…0.07 yielded a `nice_max` of 0.05, and points above it were drawn outside the grid. | `scale.ex` — the step is cleaned with `strip_number/1` (7 significant digits) rather than rounded to 2 decimals. |
+| 4 | `plot_options.bar.data_labels.position` only honoured `:center`; `:top` and `:bottom` were identical, and negative bars got their label at the value end (below the bar) in every mode. | `renderer.ex` — `bar_label_pos/3` resolves the position against the rect's edges, so the top edge of a bar hanging below zero is the zero line. |
+| 5 | `TimeScale.ticks/3` raised `ArithmeticError` on non-integer millisecond bounds, because `ceil_div/2` calls `Kernel.div/2`. Reachable from the public API via a float `xaxis.min`. | `time_scale.ex` — `ticks/3` normalizes its bounds to whole milliseconds once, at the entry point, which also covers the month and year generators. |
+| 6 | A datetime chart crossing midnight gave no date context: hour ticks were labelled `HH:mm` only, so `20:00 … 00:00 … 04:00` never said which day a point belonged to. | `time_scale.ex` — `label_ticks/2` promotes the first sub-day tick of a new day to a date label. The first tick in a range keeps its time. |
+
+Defect 3 also moved one committed golden (`test/snapshots/n1.svg`): a scatter
+point previously drawn at `cx="590.32"`, past the grid's right edge at 590, now
+lands on it, and the x labels read `10.375 … 36.4` instead of the truncated
+`10.37 … 36.38`.
 
 ## Verified correct
 
-Edge cases that behave correctly today and would be easy to break. Each is
-pinned by an **untagged** guard test in the same file, so the default `mix test`
-run catches a regression into any of them.
+Edge cases that behave correctly and would be easy to break. Each is pinned by a
+guard test in the same file.
 
 | Behavior | Why it holds |
 | --- | --- |
@@ -44,5 +51,6 @@ run catches a regression into any of them.
 
 | Bucket | Count |
 | --- | --- |
-| Confirmed defects (open) | 6 |
+| Open defects | 0 |
+| Fixed defects, pinned by regression tests | 6 |
 | Behaviors pinned by guard tests | 12 |
