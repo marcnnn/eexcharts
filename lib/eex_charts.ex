@@ -42,6 +42,27 @@ defmodule EexCharts do
 
   Charts render fully without the hook — only hover tooltips need it.
 
+  ## daisyUI theming
+
+  Apps set up with [daisyUI](https://daisyui.com) (the Phoenix 1.8 default) can
+  opt every chart into the active daisyUI theme:
+
+      config :eexcharts, theme_mode: :daisy
+
+  or per chart, `options={%{theme: %{mode: :daisy}}}`. Colors are emitted as
+  `var(--color-primary)` and friends, so the browser resolves them against
+  whichever theme is active — switching `data-theme` restyles a rendered chart
+  with no re-render. Each value keeps its light-theme literal as a `var()`
+  fallback, so charts degrade cleanly on pages without daisyUI. See
+  `EexCharts.Theme.apply/2` for the full mapping.
+
+  ## Static output (PDFs, images)
+
+  `to_svg/4` renders a chart as a standalone `<svg>` string with all
+  interactive furniture omitted, ready for SVG rasterizers (resvg, Typst's
+  `image()`, librsvg) and PDF pipelines. See its docs for the print-specific
+  caveats (dark-mode background, fonts).
+
   ## LiveView interactions
 
     * `on_click="point-selected"` — bars, slices and category zones get
@@ -162,5 +183,58 @@ defmodule EexCharts do
        hook: opts[:hook],
        class: opts[:class]
      })}
+  end
+
+  @doc """
+  Renders a chart to a standalone `<svg>` string for static output — PDF
+  pipelines (Typst, resvg, ChromicPDF), image conversion, downloads.
+
+  Unlike `render/4` there is no wrapping `<div>`, no tooltip HTML, and none
+  of the hover furniture that only the JS hook uses (crosshair, hover
+  markers, hover zones, `data-j` indexes) — a rasterizer would draw all of
+  it. Interactive options (`:on_click`, `:push_hover`, `:on_legend_click`)
+  are not accepted, so the output carries no `phx-*` bindings.
+
+  Static rasterizers have no CSS custom properties and render `var(…)` as
+  black, ignoring even the fallback — so every `var(--x, fallback)` in the
+  effective config is resolved to its fallback literal, and shading uses
+  plain hex instead of `color-mix()`. Under `theme: %{mode: :daisy}` the
+  output therefore matches the ApexCharts light theme.
+
+  Two things to set explicitly for print output:
+
+    * `theme: %{mode: :dark}` changes text colors but not the background —
+      also pass `chart: %{background: "#343434"}` (or render `:light`),
+      otherwise light text lands on white paper.
+    * `chart.font_family` defaults to `Helvetica, Arial, sans-serif`; a
+      rasterizer without those fonts substitutes its own (correctly
+      positioned, since layout is measured server-side). Set a font the
+      rendering host has installed if exact typography matters.
+
+  ## Example
+
+      EexCharts.to_svg("cpu", :line, [%{name: "CPU", data: [10, 20, 15]}],
+        categories: ["a", "b", "c"]
+      )
+      #=> "<svg id=\\"cpu-svg\\" ...>...</svg>"
+
+  Accepts `:categories`, `:labels`, `:width`, `:height`, `:options`, and
+  `:hidden_series`, with the same meaning as `render/4`.
+  """
+  def to_svg(id, type, series, opts \\ []) do
+    opts = Map.new(opts)
+
+    Renderer.render(%{
+      id: id,
+      type: type,
+      series: series,
+      categories: opts[:categories],
+      labels: opts[:labels],
+      width: opts[:width],
+      height: opts[:height],
+      options: opts[:options] || %{},
+      hidden_series: opts[:hidden_series] || [],
+      static: true
+    })
   end
 end

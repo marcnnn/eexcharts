@@ -28,6 +28,7 @@ defmodule EexCharts.Renderer do
   def render(params) do
     type = params[:type] || :line
     id = params[:id] || "eexcharts"
+    params = if params[:static], do: staticize_params(params), else: params
 
     opts =
       (params[:options] || %{})
@@ -36,6 +37,7 @@ defmodule EexCharts.Renderer do
       |> put_if(params[:categories], [:xaxis, :categories])
 
     cfg = Config.build(type, opts)
+    cfg = if params[:static], do: staticize_cfg(cfg), else: cfg
 
     cond do
       type in [:pie, :donut, :polar_area] ->
@@ -53,6 +55,34 @@ defmodule EexCharts.Renderer do
   def hidden_set(params) do
     MapSet.new(params[:hidden_series] || [])
   end
+
+  # ── Static mode (`EexCharts.to_svg/4`) ───────────────────────────────────
+  #
+  # Static output goes to a rasterizer, not a browser: there is no hook, no
+  # hover, and no CSS. Dropping the interactive params keeps `phx-*` bindings
+  # out; disabling the tooltip suppresses everything that exists only for the
+  # hook (tooltip HTML, crosshair, hover zones, hover markers).
+
+  defp staticize_params(params) do
+    Map.drop(params, [:on_click, :push_hover, :on_legend_click])
+  end
+
+  defp staticize_cfg(cfg) do
+    cfg
+    |> put_in([:tooltip, :enabled], false)
+    |> resolve_cfg_vars()
+  end
+
+  # Rasterizers render `var(…)` as black (the fallback inside is ignored), so
+  # resolve fallbacks to their literals config-wide. Doing it on the config —
+  # rather than the emitted SVG — also means `Color.shade/2` sees plain hex
+  # and never emits `color-mix()`, which rasterizers can't parse either.
+  defp resolve_cfg_vars(%{} = map),
+    do: Map.new(map, fn {k, v} -> {k, resolve_cfg_vars(v)} end)
+
+  defp resolve_cfg_vars(list) when is_list(list), do: Enum.map(list, &resolve_cfg_vars/1)
+  defp resolve_cfg_vars(value) when is_binary(value), do: EexCharts.Color.resolve_vars(value)
+  defp resolve_cfg_vars(value), do: value
 
   defp put_if(opts, nil, _path), do: opts
 
@@ -114,7 +144,7 @@ defmodule EexCharts.Renderer do
       end
 
     hover_markers =
-      if cfg.chart.type in [:line, :area],
+      if cfg.chart.type in [:line, :area] and !params[:static],
         do: Charts.Line.hover_markers(cfg, series, l),
         else: []
 
@@ -894,13 +924,23 @@ defmodule EexCharts.Renderer do
     el(
       "div",
       %{
-        class: "eexcharts-tooltip",
-        data_theme: cfg.tooltip.theme,
+        class: tooltip_class(cfg.tooltip.theme),
+        data_theme: tooltip_data_theme(cfg.tooltip.theme),
         style: "font-size:#{fmt(cfg.tooltip.style.font_size)}px"
       },
       tips
     )
   end
+
+  # daisyUI selects its own themes with `data-theme`, so the daisy tooltip is
+  # picked out by class and leaves the attribute off — that way the tooltip
+  # inherits whichever daisyUI theme is active on an ancestor instead of
+  # declaring one of its own.
+  defp tooltip_class(:daisy), do: "eexcharts-tooltip eexcharts-tooltip-daisy"
+  defp tooltip_class(_theme), do: "eexcharts-tooltip"
+
+  defp tooltip_data_theme(:daisy), do: nil
+  defp tooltip_data_theme(theme), do: theme
 
   # Structured data points (OHLC, ranges) format their own tooltip values.
   defp tooltip_value(cfg, v) do
@@ -1039,7 +1079,18 @@ defmodule EexCharts.Renderer do
 
   # ── Container ────────────────────────────────────────────────────────────
 
+  # Static mode wants the bare `<svg>`: no wrapper div, no hook, no tooltip
+  # HTML. The `data-j`/`data-cx`/`data-cy` hover-lookup attributes are emitted
+  # unconditionally by the chart modules, so they are stripped here instead of
+  # threading a flag through every one of them. Safe as a regex because `el/3`
+  # escapes `"` inside attribute values.
   @doc false
+  def container(_cfg, %{static: true}, _id, svg, _tooltips) do
+    svg
+    |> IO.iodata_to_binary()
+    |> String.replace(~r/ data-(?:j|cx|cy)="[^"]*"/, "")
+  end
+
   def container(cfg, params, id, svg, tooltips) do
     max_w = if is_number(cfg.chart.width), do: "max-width:#{fmt(cfg.chart.width)}px;", else: ""
 

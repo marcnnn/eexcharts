@@ -23,13 +23,18 @@ bindings, so selections arrive as ordinary LiveView events.
 - **Axes:** category, numeric, and datetime x-axes (ported TimeScale tick
   logic), logarithmic y-axes, multiple y-axes with `opposite: true`
 - **Annotations:** y/x axis lines and bands, labeled point markers
-- **Theming:** light and dark (`theme: %{mode: :dark}`), custom palettes
+- **Theming:** light and dark (`theme: %{mode: :dark}`), custom palettes, and
+  [daisyUI](https://daisyui.com) (`theme: %{mode: :daisy}`) — charts follow the
+  active daisyUI theme, including live theme switches, with no JS
 - **ApexCharts fidelity:** same default palette, per-type defaults, nice-scale
   axis algorithm, `column_width`/`bar_height` percentages, border radius
   (`:end` / `:around`), gradient area fills, donut center/total labels,
   percentage slice labels
 - **Server-side everything:** charts render without any JS at all; the hook
   is only needed for hover tooltips
+- **Static SVG export:** `to_svg/4` emits a bare `<svg>` for PDF pipelines
+  (Typst, resvg, ChromicPDF) and image conversion — no hover furniture, no
+  `phx-*` wiring, CSS variables resolved to literals
 - **LiveView-native interactivity:** `on_click` → `phx-click` with
   `phx-value-index` / `phx-value-series`; `on_legend_click` + `hidden_series`
   for legend toggling; optional `push_hover` pushes hover events to the server
@@ -109,6 +114,34 @@ defaults.
 />
 ```
 
+### daisyUI theming
+
+A Phoenix app generated with daisyUI (the default since Phoenix 1.8) can hand
+its theme to every chart with one line:
+
+```elixir
+# config/config.exs
+config :eexcharts, theme_mode: :daisy
+```
+
+Or per chart: `options={%{theme: %{mode: :daisy}}}`.
+
+Series then use daisyUI's semantic colors (`primary`, `secondary`, `accent`,
+`info`, `success`, `warning`, `error`, `neutral`), axis text follows
+`base-content`, grid lines follow `base-300`, slice separators follow
+`base-100`, and labels drawn on a mark use that color's paired `-content`
+color — so contrast stays correct in every theme, which is more than
+ApexCharts' hardcoded white manages.
+
+Nothing is resolved on the server: charts emit `var(--color-primary)` and let
+the browser resolve it. Switching `data-theme` restyles an already-rendered
+chart instantly, with no re-render and no round-trip — dark mode included.
+Every value carries its light-theme literal as a `var()` fallback, so charts
+still look right on a page without daisyUI.
+
+Set `theme: %{mode: :daisy, palette: :palette6}` to keep daisyUI chrome while
+pinning the series to an ApexCharts palette.
+
 ### Interactions from LiveView
 
 ```heex
@@ -171,6 +204,34 @@ EexCharts.render("cpu", :line, [%{name: "CPU", data: [10, 20, 15]}],
 ```
 
 returns safe HTML for controllers, static pages, or emails — no JS involved.
+
+### Static SVG export (PDFs, images)
+
+```elixir
+EexCharts.to_svg("cpu", :line, [%{name: "CPU", data: [10, 20, 15]}],
+  categories: ~w(a b c)
+)
+```
+
+returns a standalone `<svg>` string for SVG rasterizers — Typst's `image()`,
+resvg, librsvg — and PDF pipelines. Compared to `render/4`:
+
+- no wrapping `<div>`, tooltip HTML, or hover furniture (crosshair, hover
+  markers, hover zones, `data-*` indexes) — a rasterizer would draw all of it
+- no `phx-*` bindings (the interactive options aren't accepted)
+- every `var(--x, fallback)` is resolved to its fallback literal and shading
+  uses hex instead of `color-mix()`, because rasterizers have no CSS custom
+  properties and would render `var(…)` as **black** — under
+  `theme: %{mode: :daisy}` the export matches the ApexCharts light theme
+
+Two print-specific caveats:
+
+- `theme: %{mode: :dark}` changes text colors but **not** the background; also
+  set `chart: %{background: "#343434"}` (or export in `:light`), otherwise
+  light text lands on white paper.
+- `chart.font_family` defaults to Helvetica/Arial. A rendering host without
+  those fonts substitutes its own (layout is measured server-side, so labels
+  stay correctly positioned); set a font the host has if typography matters.
 
 ## Development
 
