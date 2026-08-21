@@ -297,10 +297,16 @@ defmodule EexCharts.Renderer do
         xmlns: "http://www.w3.org/2000/svg",
         class: "eexcharts-svg",
         font_family: cfg.chart.font_family,
-        style: "width:100%;height:auto;display:block;"
+        style: svg_style(cfg, l)
       },
       children
     )
+  end
+
+  defp svg_style(cfg, l) do
+    if cfg.chart.pixel_perfect,
+      do: "width:#{fmt(l.w)}px;height:#{fmt(l.h)}px;display:block;",
+      else: "width:100%;height:auto;display:block;"
   end
 
   @doc false

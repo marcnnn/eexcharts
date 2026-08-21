@@ -55,6 +55,12 @@ defmodule EexCharts.Config do
         # `:auto` caps the rendered chart at `width` px; `false` lets it scale
         # to fill a wider container (the SVG keeps its aspect ratio).
         max_width: :auto,
+        # Render the SVG at exactly `width` x `height` CSS pixels instead of
+        # letting it stretch to the container. One SVG unit is then one device
+        # pixel, which matters when the container width is fractional: a
+        # viewBox of 1242 stretched into a 1242.4px box shifts the right-hand
+        # side of the chart by half a pixel and everything there re-antialiases.
+        pixel_perfect: false,
         # Extra height reserved below the chart, matching ApexCharts'
         # `chart.parentHeightOffset` (it sets the host element's `min-height`
         # to `height + 15`). Only applied to fixed-size charts.
