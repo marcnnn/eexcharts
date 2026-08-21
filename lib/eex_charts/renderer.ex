@@ -875,7 +875,7 @@ defmodule EexCharts.Renderer do
               el("rect", %{
                 class: "eexcharts-datalabel-bg",
                 x: x - tw / 2 - pad_h,
-                y: y - Layout.text_height(fs) / 2 - pad_v / 2,
+                y: y - Layout.text_height(fs) / 2 - pad_v / 2 + dl.background.offset_y,
                 width: tw + pad_h * 2,
                 height: Layout.text_height(fs) + pad_v,
                 rx: dl.background.border_radius,
