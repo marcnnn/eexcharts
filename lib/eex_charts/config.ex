@@ -225,6 +225,12 @@ defmodule EexCharts.Config do
         width: nil,
         offset_x: 0,
         offset_y: 0,
+        # Render the legend as HTML in a `foreignObject` instead of SVG text.
+        # ApexCharts' legend is an HTML flex overlay, so its item widths and
+        # row pitch come from the browser's own layout; ours can only estimate
+        # them from font metrics. Opting in hands the same job to the same
+        # engine and the two agree exactly.
+        html: false,
         markers: %{size: 6, shape: :circle, stroke_width: 0, stroke_color: nil, radius: nil},
         item_margin: %{horizontal: 5, vertical: 4},
         labels: %{colors: nil, use_series_colors: false}
