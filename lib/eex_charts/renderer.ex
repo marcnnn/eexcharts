@@ -565,10 +565,11 @@ defmodule EexCharts.Renderer do
       style = axis.labels.style
       color = axis_label_color(style.colors, cfg.chart.fore_color)
 
+      # Gap and vertical nudge measured against ApexCharts' own axis labels.
       {x, anchor} =
         if axis.opposite,
-          do: {l.grid_x + l.grid_w + 8, "start"},
-          else: {l.grid_x - 8, "end"}
+          do: {l.grid_x + l.grid_w + 6, "start"},
+          else: {l.grid_x - 6, "end"}
 
       scale.ticks
       |> Enum.with_index()
@@ -578,7 +579,7 @@ defmodule EexCharts.Renderer do
           %{
             class: "eexcharts-yaxis-label",
             x: x,
-            y: Layout.y_for(l, t, scale),
+            y: Layout.y_for(l, t, scale) + 1,
             text_anchor: anchor,
             dominant_baseline: "central",
             fill: color,
@@ -641,7 +642,7 @@ defmodule EexCharts.Renderer do
           x_label_text(
             cfg,
             Layout.x_value_pos(l, v),
-            l.grid_y + l.grid_h + tick_h + style.font_size + 4,
+            l.grid_y + l.grid_h + tick_h + style.font_size + 6,
             format_x_label(cfg, formatter_input, i),
             style,
             color
@@ -662,7 +663,9 @@ defmodule EexCharts.Renderer do
       tick_h = if cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
 
       max_label_w =
-        categories |> Enum.map(&Layout.text_width(&1, style.font_size)) |> Enum.max(fn -> 0 end)
+        categories
+        |> Enum.map(&Layout.text_width(&1, style.font_size, Layout.metrics(cfg)))
+        |> Enum.max(fn -> 0 end)
 
       # Thin labels that would overlap (ApexCharts hideOverlappingLabels).
       # Rotated labels stack diagonally, so their horizontal footprint is only
@@ -702,7 +705,7 @@ defmodule EexCharts.Renderer do
             x_label_text(
               cfg,
               Layout.category_pos(l, i),
-              l.grid_y + l.grid_h + tick_h + style.font_size + 4,
+              l.grid_y + l.grid_h + tick_h + style.font_size + 6,
               text,
               style,
               color
@@ -784,8 +787,10 @@ defmodule EexCharts.Renderer do
   defp one_y_axis_title(cfg, l, axis) do
     if axis.title.text do
       style = axis.title.style
-      x = if axis.opposite, do: l.w - style.font_size, else: style.font_size
-      y = l.grid_y + l.grid_h / 2
+      # ApexCharts hugs the left edge a little tighter and centres the rotated
+      # title slightly below the plot's midline.
+      x = if axis.opposite, do: l.w - style.font_size + 6, else: style.font_size - 6
+      y = l.grid_y + l.grid_h / 2 + 4
       rotate = if axis.opposite, do: 90, else: -90
 
       el(
@@ -883,7 +888,7 @@ defmodule EexCharts.Renderer do
           # at the top) — `addBackgroundToDataLabel`.
           pill =
             if dl.background.enabled do
-              tw = Layout.text_width(text, fs)
+              tw = Layout.text_width(text, fs, Layout.metrics(cfg))
               pad_h = dl.background.padding
               pad_v = dl.background.padding / 2
 

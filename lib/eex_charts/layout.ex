@@ -13,7 +13,7 @@ defmodule EexCharts.Layout do
   full per-axis lists.
   """
 
-  alias EexCharts.{Config, Legend, Scale, SVG, TimeScale}
+  alias EexCharts.{Config, FontMetrics, Legend, Scale, SVG, TimeScale}
 
   defstruct w: 600,
             h: 350,
@@ -94,7 +94,7 @@ defmodule EexCharts.Layout do
         w0 =
           if hd(y_axes).labels.show and categories != [] do
             categories
-            |> Enum.map(&text_width(to_string(&1), y_font))
+            |> Enum.map(&text_width(to_string(&1), y_font, metrics(cfg)))
             |> Enum.max(fn -> 0 end)
             |> max(hd(y_axes).labels.min_width)
             |> min(hd(y_axes).labels.max_width)
@@ -139,7 +139,9 @@ defmodule EexCharts.Layout do
 
     {grid_y, bottom} =
       if legend.position == :top do
-        {grid_y + bottom_legend_h, pad.bottom + x_label_h}
+        # A top legend shares the title's band rather than stacking under it,
+        # which is where ApexCharts puts it.
+        {grid_y + max(bottom_legend_h - title_h, 0), pad.bottom + x_label_h}
       else
         {grid_y, pad.bottom + x_label_h + bottom_legend_h}
       end
@@ -201,7 +203,11 @@ defmodule EexCharts.Layout do
         scale.ticks
         |> Enum.with_index()
         |> Enum.map(fn {t, i} ->
-          text_width(format_y_label(cfg, axis, t, i), axis.labels.style.font_size)
+          text_width(
+            format_y_label(cfg, axis, t, i),
+            axis.labels.style.font_size,
+            metrics(cfg)
+          )
         end)
         |> Enum.max(fn -> 0 end)
         |> max(axis.labels.min_width)
@@ -232,7 +238,7 @@ defmodule EexCharts.Layout do
   defp x_label_overhang(cfg, %{ticks: ticks, type: type}) do
     if cfg.xaxis.labels.show and ticks != [] and (cfg.xaxis.labels.rotate || 0) == 0 do
       font = cfg.xaxis.labels.style.font_size
-      {0, text_width(label_text(cfg, type, List.last(ticks)), font) / 2}
+      {0, text_width(label_text(cfg, type, List.last(ticks)), font, metrics(cfg)) / 2}
     else
       {0, 0}
     end
@@ -358,31 +364,33 @@ defmodule EexCharts.Layout do
     x_for(l, 0 |> max(min) |> min(max))
   end
 
-  # Per-character advance widths in em, averaged over the common UI sans faces
-  # (Helvetica, Arial, Segoe UI, Roboto). A flat factor is too coarse: "100 %"
-  # and "Illinois" are the same length but nowhere near the same width, and the
-  # error lands directly in the axis gutters and legend item widths.
-  @narrow ~c"iljtfrI!|.,;:'`()[]{}/\\ "
-  @wide ~c"mwMW@%"
-  @upper ~c"ABCDEFGHIJKLMNOPQRSTUVXYZ0123456789"
+  @doc """
+  Rendered width of `text` at `font_size` (px), from the `:arial` advance-width
+  table.
+  """
+  def text_width(text, font_size), do: text_width(text, font_size, :arial)
 
-  @doc "Estimated rendered width of `text` at `font_size` (px)."
-  def text_width(text, font_size) do
+  @doc """
+  Rendered width of `text` at `font_size` (px) using the given font metrics
+  (see `EexCharts.FontMetrics`).
+
+  This is the server-side stand-in for ApexCharts' `getBBox`, and it has to be
+  close: the result feeds the axis gutters, the legend item widths and the
+  label-wrapping decisions, so an error here moves the whole plot rectangle.
+  """
+  def text_width(text, font_size, metrics) do
+    table = FontMetrics.table(metrics)
+    fallback = FontMetrics.fallback(metrics)
+
     text
     |> to_string()
     |> String.to_charlist()
-    |> Enum.reduce(0.0, fn c, acc -> acc + char_em(c) end)
+    |> Enum.reduce(0.0, fn c, acc -> acc + Map.get(table, c, fallback) end)
     |> Kernel.*(font_size)
   end
 
-  defp char_em(c) do
-    cond do
-      c in @narrow -> 0.31
-      c in @wide -> 0.83
-      c in @upper -> 0.62
-      true -> 0.53
-    end
-  end
+  @doc "The font metrics a config asks for."
+  def metrics(cfg), do: cfg.chart.font_metrics
 
   @doc """
   Estimated rendered height of one line of text at `font_size` (px) — the
@@ -414,7 +422,8 @@ defmodule EexCharts.Layout do
         |> Enum.with_index()
         |> Enum.flat_map(fn {c, i} -> label_lines_of(cfg, c, i) end)
 
-      max_w = lines |> Enum.map(&text_width(&1, font_size)) |> Enum.max(fn -> 0 end)
+      max_w =
+        lines |> Enum.map(&text_width(&1, font_size, metrics(cfg))) |> Enum.max(fn -> 0 end)
       line_count = lines |> length() |> div(max(length(categories), 1)) |> max(1)
 
       h = max_w * :math.sin(rad) + font_size * line_count * :math.cos(rad)

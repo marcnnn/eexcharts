@@ -31,7 +31,9 @@ defmodule EexCharts.Legend do
       items =
         Enum.with_index(names, fn name, i ->
           text = to_string(name)
-          item_w = marker_d + @marker_gap + Layout.text_width(text, font) + 2 * im.horizontal
+          item_w =
+            marker_d + @marker_gap + Layout.text_width(text, font, Layout.metrics(cfg)) +
+              2 * im.horizontal
           %{text: text, index: i, w: item_w}
         end)
 
@@ -91,11 +93,13 @@ defmodule EexCharts.Legend do
     {x0, y0} =
       case legend.position do
         :bottom -> {0, l.h - legend.h + 4}
-        :top -> {0, (l.grid_y - legend.h - 8 + l.title_h) |> max(l.title_h + 4)}
+        # Centred on the title band when there is a title, else at the top.
+        :top -> {0, max((l.title_h - legend.h) / 2, 0) + 4}
         :right -> {l.w - legend.w, l.grid_y + max((l.grid_h - legend.h) / 2, 0)}
       end
 
-    {x0, y0} = {x0 + cfg.legend.offset_x, y0 + cfg.legend.offset_y}
+    # Measured against ApexCharts' legend placement.
+    {x0, y0} = {x0 + cfg.legend.offset_x + 3, y0 + cfg.legend.offset_y - 2}
 
     rows =
       legend.rows

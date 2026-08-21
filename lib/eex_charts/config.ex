@@ -60,6 +60,11 @@ defmodule EexCharts.Config do
         # to `height + 15`). Only applied to fixed-size charts.
         parent_height_offset: 15,
         font_family: "Helvetica, Arial, sans-serif",
+        # Advance-width table used to size text server-side: `:arial`,
+        # `:dejavu`, or a `%{codepoint => em}` map (see EexCharts.FontMetrics).
+        # It has to match the font the browser actually picks, or every gutter
+        # the width feeds into drifts.
+        font_metrics: :arial,
         fore_color: "#373d3f",
         background: "",
         stacked: false,
@@ -139,7 +144,12 @@ defmodule EexCharts.Config do
         range: nil,
         tick_amount: nil,
         step_size: nil,
-        title: %{text: nil, offset_x: 0, offset_y: 0, style: %{font_size: 11, font_weight: 900, color: nil}},
+        title: %{
+          text: nil,
+          offset_x: 0,
+          offset_y: 0,
+          style: %{font_size: 12, font_weight: 900, color: nil}
+        },
         labels: %{
           show: true,
           formatter: nil,
