@@ -601,12 +601,18 @@ defmodule EexCharts.Renderer do
       tick_h = if cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
 
       labels =
-        Enum.map(xs.ticks, fn %{value: v, label: label} ->
+        xs.ticks
+        |> Enum.with_index()
+        |> Enum.map(fn {%{value: v, label: label}, i} ->
+          # ApexCharts hands a numeric axis' formatter the raw value; a
+          # datetime axis gets the already-formatted string.
+          formatter_input = if xs.type == :numeric, do: v, else: label
+
           x_label_text(
             cfg,
             Layout.x_value_pos(l, v),
             l.grid_y + l.grid_h + tick_h + style.font_size + 4,
-            format_x_label(cfg, label),
+            format_x_label(cfg, formatter_input, i),
             style,
             color
           )
@@ -645,7 +651,7 @@ defmodule EexCharts.Renderer do
         |> Enum.with_index()
         |> Enum.filter(fn {_c, i} -> rem(i, step) == 0 end)
         |> Enum.map(fn {c, i} ->
-          text = format_x_label(cfg, c)
+          text = format_x_label(cfg, c, i)
 
           if l.horizontal do
             el(
@@ -660,7 +666,7 @@ defmodule EexCharts.Renderer do
                 font_size: style.font_size,
                 font_weight: style.font_weight
               },
-              esc(text)
+              label_lines(text, l.grid_x - 8)
             )
           else
             x_label_text(
@@ -709,13 +715,29 @@ defmodule EexCharts.Renderer do
         font_size: style.font_size,
         font_weight: style.font_weight
       },
-      esc(text)
+      label_lines(text, x)
     )
   end
 
-  defp format_x_label(cfg, c) do
+  # A formatter may return several lines; each extra one becomes a `tspan` a
+  # line-height below its predecessor, anchored at the same x (so it also works
+  # under a rotation transform).
+  defp label_lines(lines, x) when is_list(lines) do
+    lines
+    |> Enum.with_index()
+    |> Enum.map(fn {line, i} ->
+      el("tspan", %{x: x, dy: if(i == 0, do: nil, else: "1.2em")}, esc(to_string(line)))
+    end)
+  end
+
+  defp label_lines(text, _x), do: esc(to_string(text))
+
+  # A formatter of arity 2 also receives the label's index (ApexCharts passes
+  # the tick's position), and may return a list of lines.
+  defp format_x_label(cfg, c, i) do
     case cfg.xaxis.labels.formatter do
-      f when is_function(f, 1) -> to_string(f.(c))
+      f when is_function(f, 2) -> f.(c, i)
+      f when is_function(f, 1) -> f.(c)
       _ -> to_string(c)
     end
   end
@@ -1214,7 +1236,10 @@ defmodule EexCharts.Renderer do
 
   @doc false
   def container(cfg, params, id, svg, tooltips) do
-    max_w = if is_number(cfg.chart.width), do: "max-width:#{fmt(cfg.chart.width)}px;", else: ""
+    max_w =
+      if cfg.chart.max_width != false and is_number(cfg.chart.width),
+        do: "max-width:#{fmt(cfg.chart.width)}px;",
+        else: ""
 
     el(
       "div",

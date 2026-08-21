@@ -40,6 +40,9 @@ defmodule EexCharts.Config do
         type: :line,
         width: 600,
         height: 350,
+        # `:auto` caps the rendered chart at `width` px; `false` lets it scale
+        # to fill a wider container (the SVG keeps its aspect ratio).
+        max_width: :auto,
         font_family: "Helvetica, Arial, sans-serif",
         fore_color: "#373d3f",
         background: "",
