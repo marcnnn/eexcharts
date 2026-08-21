@@ -492,6 +492,7 @@ defmodule EexCharts.Renderer do
           y: l.grid_y + l.grid_h + tick_h + label_h + style.font_size + 10 + t.offset_y,
           text_anchor: "middle",
           fill: style.color || cfg.chart.fore_color,
+          font_family: style.font_family,
           font_size: style.font_size,
           font_weight: style.font_weight
         },
@@ -578,11 +579,12 @@ defmodule EexCharts.Renderer do
           "text",
           %{
             class: "eexcharts-yaxis-label",
-            x: x,
-            y: Layout.y_for(l, t, scale) + 1,
+            x: x + axis.labels.offset_x,
+            y: Layout.y_for(l, t, scale) + 1 + axis.labels.offset_y,
             text_anchor: anchor,
             dominant_baseline: "central",
             fill: color,
+            font_family: style.font_family,
             font_size: style.font_size,
             font_weight: style.font_weight
           },
@@ -664,7 +666,7 @@ defmodule EexCharts.Renderer do
 
       max_label_w =
         categories
-        |> Enum.map(&Layout.text_width(&1, style.font_size, Layout.metrics(cfg)))
+        |> Enum.map(&Layout.text_width(&1, style.font_size, Layout.metrics(cfg, style)))
         |> Enum.max(fn -> 0 end)
 
       # Thin labels that would overlap (ApexCharts hideOverlappingLabels).
@@ -745,6 +747,7 @@ defmodule EexCharts.Renderer do
         transform: transform,
         text_anchor: anchor,
         fill: color,
+        font_family: style.font_family,
         font_size: style.font_size,
         font_weight: style.font_weight
       },
@@ -797,11 +800,12 @@ defmodule EexCharts.Renderer do
         "text",
         %{
           class: "eexcharts-yaxis-title",
-          x: x,
-          y: y,
+          x: x + axis.title.offset_x,
+          y: y + axis.title.offset_y,
           transform: "rotate(#{rotate} #{fmt(x)} #{fmt(y)})",
           text_anchor: "middle",
           fill: style.color || cfg.chart.fore_color,
+          font_family: style.font_family,
           font_size: style.font_size,
           font_weight: style.font_weight
         },
@@ -888,7 +892,7 @@ defmodule EexCharts.Renderer do
           # at the top) — `addBackgroundToDataLabel`.
           pill =
             if dl.background.enabled do
-              tw = Layout.text_width(text, fs, Layout.metrics(cfg))
+              tw = Layout.text_width(text, fs, Layout.metrics(cfg, dl.style))
               pad_h = dl.background.padding
               pad_v = dl.background.padding / 2
 
@@ -923,6 +927,7 @@ defmodule EexCharts.Renderer do
                 text_anchor: "middle",
                 dominant_baseline: "central",
                 fill: text_color,
+                font_family: dl.style.font_family,
                 font_size: fs,
                 font_weight: dl.style.font_weight,
                 class: "eexcharts-datalabel"
