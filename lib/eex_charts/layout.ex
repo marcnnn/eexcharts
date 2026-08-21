@@ -115,10 +115,16 @@ defmodule EexCharts.Layout do
     x_label_h =
       if cfg.xaxis.labels.show do
         tick_h = if cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
-        tick_h + x_font + 12
+        tick_h + rotated_label_height(cfg, categories, x_font) + 12
       else
         4
       end
+
+    # An x-axis title sits below the labels, so it eats into the plot height.
+    x_label_h =
+      if cfg.xaxis.title.text,
+        do: x_label_h + cfg.xaxis.title.style.font_size + 10,
+        else: x_label_h
 
     grid_x = pad.left + left_title_w + left_label_w + if(left_label_w > 0, do: 10, else: 0)
     grid_y = pad.top + title_h + 12
@@ -185,8 +191,9 @@ defmodule EexCharts.Layout do
     |> Enum.map(fn {{axis, scale}, _i} ->
       if axis.labels.show do
         scale.ticks
-        |> Enum.map(fn t ->
-          text_width(format_y_label(cfg, axis, t), axis.labels.style.font_size)
+        |> Enum.with_index()
+        |> Enum.map(fn {t, i} ->
+          text_width(format_y_label(cfg, axis, t, i), axis.labels.style.font_size)
         end)
         |> Enum.max(fn -> 0 end)
         |> max(axis.labels.min_width)
@@ -317,12 +324,55 @@ defmodule EexCharts.Layout do
     String.length(to_string(text)) * font_size * 0.6
   end
 
-  @doc "Formats a y-axis tick label according to the primary y-axis config."
-  def format_y_label(cfg, v), do: format_y_label(cfg, cfg.yaxis, v)
+  @doc """
+  Estimated rendered height of one line of text at `font_size` (px) — the
+  server-side stand-in for `getBBox().height`, which for common sans-serif
+  faces lands near 1.15 em.
+  """
+  def text_height(font_size), do: font_size * 1.15
 
-  @doc "Formats a y-axis tick label according to a specific axis map."
-  def format_y_label(_cfg, axis, v) do
+  @doc "Estimated distance from a text's baseline to the top of its box (px)."
+  def text_ascent(font_size), do: font_size * 0.95
+
+  @doc """
+  Vertical space one row of x-axis labels occupies, accounting for
+  `xaxis.labels.rotate`. Unrotated labels are one line tall; a rotated label's
+  bounding box grows with the label's own width.
+  """
+  def rotated_label_height(cfg, categories, font_size) do
+    rotate = cfg.xaxis.labels.rotate || 0
+
+    if rotate == 0 do
+      font_size
+    else
+      rad = abs(rotate) * :math.pi() / 180
+
+      max_w =
+        categories
+        |> Enum.map(&text_width(to_string(&1), font_size))
+        |> Enum.max(fn -> 0 end)
+
+      max_w * :math.sin(rad) + font_size * :math.cos(rad)
+    end
+  end
+
+  @doc "Formats a y-axis tick label according to the primary y-axis config."
+  def format_y_label(cfg, v), do: format_y_label(cfg, cfg.yaxis, v, 0)
+
+  @doc """
+  Formats a y-axis tick label according to a specific axis map.
+
+  `i` is the tick's index; formatters of arity 2 receive it as their second
+  argument, matching ApexCharts' `(value, index)` signature (used to thin out
+  labels, e.g. showing only every other tick).
+  """
+  def format_y_label(cfg, axis, v), do: format_y_label(cfg, axis, v, 0)
+
+  def format_y_label(_cfg, axis, v, i) do
     cond do
+      is_function(axis.formatter, 2) ->
+        to_string(axis.formatter.(v, i))
+
       is_function(axis.formatter, 1) ->
         to_string(axis.formatter.(v))
 

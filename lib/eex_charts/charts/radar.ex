@@ -113,7 +113,16 @@ defmodule EexCharts.Charts.Radar do
     cy = box_h / 2 + radar.offset_y
 
     {min_v, max_v} = data_range(series)
-    scale = Scale.nice_scale(min_v, max_v)
+    axis = Config.yaxis(cfg)
+
+    scale =
+      Scale.nice_scale(min_v, max_v,
+        min: axis.min,
+        max: axis.max,
+        tick_amount: axis.tick_amount,
+        step_size: axis.step_size
+      )
+
     range = scale.nice_max - scale.nice_min
     range = if range == 0, do: 1, else: range
 
@@ -201,25 +210,34 @@ defmodule EexCharts.Charts.Radar do
           })
         end)
 
+      axis = Config.yaxis(cfg)
+
       y_labels =
-        if cfg.yaxis.show do
+        if axis.show and axis.labels.show do
           y_texts = Enum.reverse(geo.scale.ticks)
+          color = y_label_color(axis.labels.style.colors, cfg.chart.fore_color)
 
           Enum.map(0..(layers - 1), fn k ->
             {x, y} = spoke_point(geo, geo.size - layer_dis * k, 0)
+            text = Layout.format_y_label(cfg, axis, Enum.at(y_texts, k), k)
 
-            el(
-              "text",
-              %{
-                x: x,
-                y: y,
-                text_anchor: "middle",
-                dominant_baseline: "central",
-                fill: cfg.chart.fore_color,
-                font_size: cfg.yaxis.labels.style.font_size
-              },
-              esc(fmt_value(Enum.at(y_texts, k)))
-            )
+            if text == "" do
+              []
+            else
+              el(
+                "text",
+                %{
+                  class: "eexcharts-yaxis-label",
+                  x: x,
+                  y: y,
+                  text_anchor: "middle",
+                  dominant_baseline: "central",
+                  fill: color,
+                  font_size: axis.labels.style.font_size
+                },
+                esc(text)
+              )
+            end
           end)
         else
           []
@@ -253,25 +271,51 @@ defmodule EexCharts.Charts.Radar do
           {x, y} = spoke_point(geo, geo.size, j)
           {anchor, nx, ny} = text_pos(x - geo.cx, y - geo.cy, geo.size)
 
+          lx = geo.cx + nx
+          ly = geo.cy + ny + label_offset_y(cfg, j)
+
           el(
             "text",
             %{
-              x: geo.cx + nx,
-              y: geo.cy + ny,
+              x: lx,
+              y: ly,
               text_anchor: anchor,
               dominant_baseline: "central",
               fill: color,
               font_size: style.font_size,
               font_weight: style.font_weight,
-              class: "eexcharts-xaxis-label"
+              class: "eexcharts-xaxis-label",
+              data_index: j
             },
-            esc(format_x_label(cfg, label))
+            label_content(format_x_label(cfg, label, j), lx)
           )
         end)
 
       el("g", %{class: "eexcharts-xaxis-labels"}, labels)
     else
       []
+    end
+  end
+
+  # A formatter may return a list of lines; each extra line becomes a `tspan`
+  # one line-height below the previous, anchored at the same x.
+  defp label_content(lines, x) when is_list(lines) do
+    lines
+    |> Enum.with_index()
+    |> Enum.map(fn {line, i} ->
+      el("tspan", %{x: x, dy: if(i == 0, do: nil, else: "1.2em")}, esc(to_string(line)))
+    end)
+  end
+
+  defp label_content(text, _x), do: esc(text)
+
+  # `xaxis.labels.offset_y` may be a function of the spoke index, so a single
+  # label (e.g. the bottom vertex) can be nudged clear of the plot.
+  defp label_offset_y(cfg, j) do
+    case cfg.xaxis.labels.offset_y do
+      f when is_function(f, 1) -> f.(j)
+      n when is_number(n) -> n
+      _ -> 0
     end
   end
 
@@ -302,8 +346,9 @@ defmodule EexCharts.Charts.Radar do
     |> Enum.filter(fn {_c, j} -> j < geo.n end)
   end
 
-  defp format_x_label(cfg, label) do
+  defp format_x_label(cfg, label, j) do
     case cfg.xaxis.labels.formatter do
+      f when is_function(f, 2) -> f.(label, j)
       f when is_function(f, 1) -> to_string(f.(label))
       _ -> label
     end
@@ -312,6 +357,10 @@ defmodule EexCharts.Charts.Radar do
   defp label_color([c | _]) when is_binary(c), do: c
   defp label_color(c) when is_binary(c), do: c
   defp label_color(_), do: "#a8a8a8"
+
+  defp y_label_color([c | _], _fore) when is_binary(c), do: c
+  defp y_label_color(c, _fore) when is_binary(c), do: c
+  defp y_label_color(_, fore), do: fore
 
   # ── Series polygons ────────────────────────────────────────────────────────────
 

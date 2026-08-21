@@ -12,7 +12,7 @@ defmodule EexCharts.Charts.Scatter do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Layout}
+  alias EexCharts.{Config, Layout, Marker}
 
   @doc "Renders scatter/bubble series into the cartesian grid."
   def render(cfg, series, %Layout{} = l, _id) do
@@ -23,6 +23,7 @@ defmodule EexCharts.Charts.Scatter do
       Enum.map(series, fn s ->
         color = Config.color_at(cfg, s.index)
         scale = Layout.scale_for_series(l, s)
+        shape = Marker.shape_for(cfg.markers.shape, s.index)
 
         markers =
           cfg
@@ -33,14 +34,11 @@ defmodule EexCharts.Charts.Scatter do
               cy = Layout.y_for(l, y, scale)
               r = radius(cfg, z, zratio)
 
-              el("circle", %{
+              Marker.render(shape, cx, cy, r, %{
                 class: "eexcharts-marker",
                 data_j: j,
                 data_cx: cx,
-                cx: cx,
-                cy: cy,
-                r: r,
-                fill: cfg.markers.colors || color,
+                fill: marker_color(cfg, s.index) || color,
                 fill_opacity: cfg.fill.opacity,
                 stroke: cfg.markers.stroke_colors,
                 stroke_width: cfg.markers.stroke_width,
@@ -55,6 +53,15 @@ defmodule EexCharts.Charts.Scatter do
       end)
 
     el("g", %{class: "eexcharts-scatter"}, groups)
+  end
+
+  defp marker_color(cfg, i) do
+    case cfg.markers.colors do
+      nil -> nil
+      [] -> nil
+      list when is_list(list) -> Enum.at(list, rem(i, length(list)))
+      c -> c
+    end
   end
 
   # Bubble radius scaling: zRatio = (zRange / gridHeight) * 16
