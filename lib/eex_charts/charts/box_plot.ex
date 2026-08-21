@@ -26,7 +26,10 @@ defmodule EexCharts.Charts.BoxPlot do
     stroke_w = cfg.stroke.width
 
     n_series = length(series)
-    slot = l.grid_w / l.n
+    # ApexCharts reserves one bar's width at the left of the plot; Layout works
+    # the resulting division out (see `Layout.grouped_slot/5`).
+    slot = l.bar_slot || l.grid_w / l.n
+    origin = l.bar_origin || l.grid_x
     bar_w = slot / max(n_series, 1) * pct(cfg.plot_options.bar.column_width) / 100
 
     series
@@ -40,7 +43,7 @@ defmodule EexCharts.Charts.BoxPlot do
         |> Enum.flat_map(fn {p, j} ->
           case five(p) do
             [mn, q1, med, q3, mx] ->
-              group_x = l.grid_x + slot * j + (slot - bar_w * n_series) / 2
+              group_x = origin + slot * j + (slot - bar_w * n_series) / 2
               x = group_x + bar_w * pos_i
               cx = x + bar_w / 2
 

@@ -26,6 +26,8 @@ defmodule EexCharts.Layout do
             horizontal: false,
             scale: nil,
             scales: [],
+            bar_origin: nil,
+            bar_slot: nil,
             y_axes: [],
             x_scale: nil,
             x_type: :category,
@@ -159,9 +161,13 @@ defmodule EexCharts.Layout do
     grid_x = grid_x + x_pad_left
     grid_w = max(grid_w - x_pad_left - x_pad_right, 10)
 
+    {bar_origin, bar_slot} = grouped_slot(cfg, grid_x, grid_w, max(n, 1), length(names))
+
     %__MODULE__{
       w: w,
       h: h,
+      bar_origin: bar_origin,
+      bar_slot: bar_slot,
       grid_x: grid_x,
       grid_y: grid_y,
       grid_w: grid_w,
@@ -296,7 +302,50 @@ defmodule EexCharts.Layout do
     %{type: :datetime, ticks: labels, nice_min: x_min, nice_max: x_max}
   end
 
+  @doc """
+  Category division for grouped bar-like charts.
+
+  ApexCharts does not simply cut the plot into `n` equal slots for grouped
+  bars: it reserves one bar's width at the left, so the division solves
+  `slot * (n + ratio / series) = grid_w`. Measured against its box-plot render
+  at two container widths, this reproduces the category pitch and the first
+  group's position to a tenth of a pixel; an equal-slot division is ~3% out,
+  which is several pixels per category.
+
+  Returns `{origin, slot}`, or `{nil, nil}` for chart types that do not group.
+  """
+  def grouped_slot(cfg, grid_x, grid_w, n, series_len) do
+    if cfg.chart.type == :box_plot and series_len > 0 do
+      ratio = column_width_ratio(cfg) / series_len
+      slot = grid_w / (n + ratio)
+      {grid_x + slot * ratio, slot}
+    else
+      {nil, nil}
+    end
+  end
+
+  defp column_width_ratio(cfg) do
+    case cfg.plot_options.bar.column_width do
+      v when is_binary(v) ->
+        case Integer.parse(v) do
+          {pct, _} -> pct / 100
+          :error -> 0.7
+        end
+
+      v when is_number(v) ->
+        v / 100
+
+      _ ->
+        0.7
+    end
+  end
+
   @doc "Pixel position of the center of category slot `i` on the category axis."
+  def category_pos(%__MODULE__{bar_slot: slot, bar_origin: origin} = _l, i)
+      when is_number(slot) do
+    origin + slot * (i + 0.5)
+  end
+
   def category_pos(%__MODULE__{horizontal: true} = l, i) do
     slot = l.grid_h / l.n
     l.grid_y + slot * (i + 0.5)
