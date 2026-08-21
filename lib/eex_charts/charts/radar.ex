@@ -240,7 +240,9 @@ defmodule EexCharts.Charts.Radar do
                   text_anchor: "middle",
                   dominant_baseline: "central",
                   fill: color,
-                  font_size: axis.labels.style.font_size
+                  font_size: axis.labels.style.font_size,
+                  font_family: axis.labels.style.font_family,
+                  font_weight: axis.labels.style.font_weight
                 },
                 esc(text)
               )

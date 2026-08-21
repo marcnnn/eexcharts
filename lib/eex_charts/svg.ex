@@ -49,16 +49,22 @@ defmodule EexCharts.SVG do
 
   def esc(other), do: other |> to_string() |> esc()
 
-  @doc "Formats a number for SVG coordinates: 2 decimals, trailing zeros trimmed."
+  # Two decimals put coordinates up to 0.005px off, and a browser rasterises
+  # at 1/256px — enough for a gridline or a rotated glyph to antialias one
+  # column over from where ApexCharts (which serialises full floats) puts it.
+  # Four decimals is comfortably under the raster grid and still compact.
+  @coord_decimals 4
+
+  @doc "Formats a number for SVG coordinates: 4 decimals, trailing zeros trimmed."
   def fmt(v) when is_integer(v), do: Integer.to_string(v)
 
   def fmt(v) when is_float(v) do
-    rounded = Float.round(v, 2)
+    rounded = Float.round(v, @coord_decimals)
 
     if rounded == trunc(rounded) do
       Integer.to_string(trunc(rounded))
     else
-      :erlang.float_to_binary(rounded, [{:decimals, 2}, :compact])
+      :erlang.float_to_binary(rounded, [{:decimals, @coord_decimals}, :compact])
     end
   end
 
