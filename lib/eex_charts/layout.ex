@@ -141,9 +141,7 @@ defmodule EexCharts.Layout do
 
     {grid_y, bottom} =
       if legend.position == :top do
-        # A top legend shares the title's band rather than stacking under it,
-        # which is where ApexCharts puts it.
-        {grid_y + max(bottom_legend_h - title_h, 0), pad.bottom + x_label_h}
+        {grid_y + bottom_legend_h, pad.bottom + x_label_h}
       else
         {grid_y, pad.bottom + x_label_h + bottom_legend_h}
       end
