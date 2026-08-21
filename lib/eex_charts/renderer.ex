@@ -900,7 +900,7 @@ defmodule EexCharts.Renderer do
             if dl.background.enabled do
               tw = Layout.text_width(text, fs, Layout.metrics(cfg, dl.style))
               pad_h = dl.background.padding
-              pad_v = dl.background.padding / 2
+              pad_v = dl.background.padding_y || dl.background.padding / 2
 
               el("rect", %{
                 class: "eexcharts-datalabel-bg",

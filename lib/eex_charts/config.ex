@@ -122,6 +122,10 @@ defmodule EexCharts.Config do
           fore_color: "#fff",
           border_radius: 2,
           padding: 4,
+          # Vertical padding; ApexCharts derives it as `padding / 2`, but the
+          # box it pads comes from a real `getBBox`, so a chart whose text
+          # metrics are estimated may need to say what it wants.
+          padding_y: nil,
           opacity: 0.9,
           border_width: 1,
           border_color: "#fff"
