@@ -98,4 +98,47 @@ defmodule EexCharts.LegendToggleTest do
     assert count_bars.(all) == 9
     assert count_bars.(one_hidden) == 6
   end
+
+  describe "html legend" do
+    defp html_legend(extra \\ %{}) do
+      render(
+        Map.merge(
+          %{
+            id: "lgh",
+            type: :line,
+            series: @series,
+            options: %{legend: %{html: true}}
+          },
+          extra
+        )
+      )
+    end
+
+    test "renders as HTML in a foreignObject instead of SVG text" do
+      html = html_legend()
+
+      assert html =~ ~s(<foreignObject)
+      assert html =~ "eexcharts-legend--html"
+      assert html =~ ~s(class="eexcharts-legend-marker")
+      assert html =~ ~s(class="eexcharts-legend-text")
+      # The browser lays the items out, so they must be flex children.
+      assert html =~ "display:flex"
+      # Without this the host page's line-height leaks in and the rows grow.
+      assert html =~ "line-height:normal"
+      refute html =~ ~s(class="eexcharts-legend-text" x=)
+    end
+
+    test "keeps the SVG legend's click and hidden-series semantics" do
+      html = html_legend(%{on_legend_click: "toggle-series", hidden_series: [1]})
+
+      assert html =~ ~s(phx-click="toggle-series")
+      assert html =~ ~s(phx-value-series="2")
+      assert html =~ "cursor:pointer"
+      assert html =~ "opacity:0.4"
+    end
+
+    test "is off by default" do
+      refute render(%{id: "lgs", type: :line, series: @series}) =~ "<foreignObject"
+    end
+  end
 end
