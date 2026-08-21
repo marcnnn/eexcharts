@@ -114,6 +114,11 @@ defmodule EexCharts.Config do
           # box it pads comes from a real `getBBox`, so a chart whose text
           # metrics are estimated may need to say what it wants.
           padding_y: nil,
+          # Nudge for the box alone. Our text box is estimated from font
+          # metrics while ApexCharts measures the rendered glyphs, so the two
+          # can disagree about where the text sits inside its own box; this
+          # re-centres the pill without moving the label.
+          offset_y: 0,
           opacity: 0.9,
           border_width: 1,
           border_color: "#fff"
