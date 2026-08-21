@@ -107,12 +107,17 @@ defmodule EexCharts.Legend do
       |> Enum.map(fn {row, r} ->
         row_w = row |> Enum.map(& &1.w) |> Enum.sum()
 
+        # `legend.width` is a box the items lay out inside, anchored at the
+        # chart's left edge — that is where ApexCharts puts it, and the rows
+        # centre within the box rather than across the whole chart.
+        box_w = if legend.position == :right, do: l.w, else: cfg.legend.width || l.w
+
         start_x =
           case {legend.position, cfg.legend.horizontal_align} do
             {:right, _} -> x0
             {_, :left} -> x0 + l.grid_x
-            {_, :right} -> x0 + l.w - row_w - 10
-            _ -> x0 + (l.w - row_w) / 2
+            {_, :right} -> x0 + box_w - row_w - 10
+            _ -> x0 + (box_w - row_w) / 2
           end
 
         y = y0 + r * row_h + row_h / 2
