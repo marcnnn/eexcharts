@@ -68,14 +68,28 @@ defmodule EexCharts.Charts.Radar do
       title_h: title_h
     }
 
+    # The web is drawn about its own origin inside a group translated to the
+    # centre, the way ApexCharts does it, rather than with absolute
+    # coordinates. That is not cosmetic: a browser composes the group
+    # transform with the local coordinate in single precision, so
+    # `translate(468) + -95.505036` and `translate(16) + 356.494964` — the
+    # same position to fifteen digits — can put a glyph a whole pixel apart.
+    # Matching the structure makes the arithmetic match too.
+    centred = %{geo | cx: 0.0, cy: 0.0}
+
+    web =
+      el("g", %{transform: "translate(#{fmt(geo.cx)}, #{fmt(geo.cy)})"}, [
+        grid_polygons(cfg, centred),
+        category_labels(cfg, centred),
+        series_polygons(cfg, centred, series, params),
+        markers(cfg, centred, series, params)
+      ])
+
     svg =
       Renderer.svg_open(cfg, l, id, [
         Renderer.background(cfg, l),
         Renderer.title(cfg, l),
-        grid_polygons(cfg, geo),
-        category_labels(cfg, geo),
-        series_polygons(cfg, geo, series, params),
-        markers(cfg, geo, series, params),
+        web,
         Legend.render(legend, cfg, l,
           hidden: hidden,
           on_click: params[:on_legend_click]

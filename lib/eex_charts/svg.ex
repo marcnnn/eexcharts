@@ -49,22 +49,25 @@ defmodule EexCharts.SVG do
 
   def esc(other), do: other |> to_string() |> esc()
 
-  # Two decimals put coordinates up to 0.005px off, and a browser rasterises
-  # at 1/256px — enough for a gridline or a rotated glyph to antialias one
-  # column over from where ApexCharts (which serialises full floats) puts it.
-  # Four decimals is comfortably under the raster grid and still compact.
-  @coord_decimals 4
+  @doc """
+  Formats a number for SVG coordinates.
 
-  @doc "Formats a number for SVG coordinates: 4 decimals, trailing zeros trimmed."
+  Emits the shortest string that round-trips back to the same float — what
+  `Number.prototype.toString` does in a browser — rather than rounding to a
+  fixed number of decimals.
+
+  Rounding here is not the harmless tidy-up it looks like. Text sits on a
+  knife edge: an end-anchored 13px label at x=263.4949645996094 and the same
+  label at x=263.4949951171875 rasterise a **whole pixel** apart in Chromium,
+  and 0.00003px is exactly the error four decimals introduce.
+  """
   def fmt(v) when is_integer(v), do: Integer.to_string(v)
 
   def fmt(v) when is_float(v) do
-    rounded = Float.round(v, @coord_decimals)
-
-    if rounded == trunc(rounded) do
-      Integer.to_string(trunc(rounded))
+    if v == trunc(v) and abs(v) < 1.0e15 do
+      Integer.to_string(trunc(v))
     else
-      :erlang.float_to_binary(rounded, [{:decimals, @coord_decimals}, :compact])
+      :erlang.float_to_binary(v, [:short])
     end
   end
 
