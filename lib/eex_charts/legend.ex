@@ -32,7 +32,7 @@ defmodule EexCharts.Legend do
         Enum.with_index(names, fn name, i ->
           text = to_string(name)
           item_w =
-            marker_d + @marker_gap + Layout.text_width(text, font, Layout.metrics(cfg)) +
+            marker_d + @marker_gap + Layout.text_width(text, font, Layout.metrics(cfg, cfg.legend)) +
               2 * im.horizontal
           %{text: text, index: i, w: item_w}
         end)
@@ -169,6 +169,7 @@ defmodule EexCharts.Legend do
                   x: x + im.horizontal + marker_d + @marker_gap,
                   y: y,
                   fill: color,
+                  font_family: cfg.legend.font_family,
                   font_size: font,
                   font_weight: cfg.legend.font_weight,
                   dominant_baseline: "central"
