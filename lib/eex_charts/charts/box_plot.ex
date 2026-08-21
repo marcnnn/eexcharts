@@ -32,7 +32,7 @@ defmodule EexCharts.Charts.BoxPlot do
     series
     |> Enum.with_index()
     |> Enum.map(fn {s, pos_i} ->
-      stroke = stroke_color(cfg) || "#24292e"
+      stroke = stroke_color(cfg, s.index) || "#24292e"
 
       elements =
         s.data
@@ -150,10 +150,13 @@ defmodule EexCharts.Charts.BoxPlot do
 
   defp clamp(l, v), do: v |> max(l.scale.nice_min) |> min(l.scale.nice_max)
 
-  defp stroke_color(cfg) do
+  # ApexCharts indexes `stroke.colors` by series, so each box can be outlined
+  # in its own series color.
+  defp stroke_color(cfg, i) do
     case cfg.stroke.colors do
       nil -> nil
-      colors when is_list(colors) -> List.first(colors)
+      [] -> nil
+      colors when is_list(colors) -> Enum.at(colors, rem(i, length(colors)))
       color -> color
     end
   end

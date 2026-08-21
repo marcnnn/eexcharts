@@ -7,10 +7,13 @@ defmodule EexCharts.Legend do
 
   alias EexCharts.{Config, Layout}
 
-  @marker_d 12
   @marker_gap 4
 
   defstruct show: false, position: :bottom, w: 0, h: 0, rows: []
+
+  # Marker box size (diameter / square edge). ApexCharts sizes legend markers
+  # by radius, so the drawn box is twice `legend.markers.size`.
+  defp marker_d(cfg), do: (cfg.legend.markers.size || 6) * 2
 
   @doc """
   Measures the legend box for the given series names within an SVG of
@@ -22,12 +25,13 @@ defmodule EexCharts.Legend do
     if show do
       font = cfg.legend.font_size
       im = cfg.legend.item_margin
-      row_h = max(font, @marker_d) + 2 * im.vertical
+      marker_d = marker_d(cfg)
+      row_h = max(font, marker_d) + 2 * im.vertical
 
       items =
         Enum.with_index(names, fn name, i ->
           text = to_string(name)
-          item_w = @marker_d + @marker_gap + Layout.text_width(text, font) + 2 * im.horizontal
+          item_w = marker_d + @marker_gap + Layout.text_width(text, font) + 2 * im.horizontal
           %{text: text, index: i, w: item_w}
         end)
 
@@ -44,7 +48,7 @@ defmodule EexCharts.Legend do
           }
 
         pos when pos in [:bottom, :top] ->
-          rows = wrap_rows(items, w)
+          rows = wrap_rows(items, cfg.legend.width || w)
           %__MODULE__{show: true, position: pos, w: w, h: row_h * length(rows) + 8, rows: rows}
       end
     else
@@ -80,7 +84,8 @@ defmodule EexCharts.Legend do
     on_click = opts[:on_click]
     font = cfg.legend.font_size
     im = cfg.legend.item_margin
-    row_h = max(font, @marker_d) + 2 * im.vertical
+    marker_d = marker_d(cfg)
+    row_h = max(font, marker_d) + 2 * im.vertical
     fore = cfg.legend.labels.colors || cfg.chart.fore_color
 
     {x0, y0} =
@@ -89,6 +94,8 @@ defmodule EexCharts.Legend do
         :top -> {0, (l.grid_y - legend.h - 8 + l.title_h) |> max(l.title_h + 4)}
         :right -> {l.w - legend.w, l.grid_y + max((l.grid_h - legend.h) / 2, 0)}
       end
+
+    {x0, y0} = {x0 + cfg.legend.offset_x, y0 + cfg.legend.offset_y}
 
     rows =
       legend.rows
@@ -115,32 +122,47 @@ defmodule EexCharts.Legend do
 
             marker_color = Config.color_at(cfg, item.index)
 
+            stroke_w = cfg.legend.markers.stroke_width
+            stroke_c = if stroke_w && stroke_w > 0, do: cfg.legend.markers.stroke_color
+
+            shape = EexCharts.Marker.shape_for(cfg.legend.markers.shape, item.index)
+
             marker =
-              case cfg.legend.markers.shape do
+              case shape do
                 :square ->
                   el("rect", %{
+                    class: "eexcharts-legend-marker",
                     x: x + im.horizontal,
-                    y: y - @marker_d / 2,
-                    width: @marker_d,
-                    height: @marker_d,
-                    rx: 2,
-                    fill: marker_color
+                    y: y - marker_d / 2,
+                    width: marker_d,
+                    height: marker_d,
+                    rx: cfg.legend.markers.radius || 2,
+                    fill: marker_color,
+                    stroke: stroke_c,
+                    stroke_width: if(stroke_c, do: stroke_w)
                   })
 
-                _ ->
-                  el("circle", %{
-                    cx: x + im.horizontal + @marker_d / 2,
-                    cy: y,
-                    r: @marker_d / 2,
-                    fill: marker_color
-                  })
+                other ->
+                  EexCharts.Marker.render(
+                    other,
+                    x + im.horizontal + marker_d / 2,
+                    y,
+                    marker_d / 2,
+                    %{
+                      class: "eexcharts-legend-marker",
+                      fill: marker_color,
+                      stroke: stroke_c,
+                      stroke_width: if(stroke_c, do: stroke_w)
+                    }
+                  )
               end
 
             text =
               el(
                 "text",
                 %{
-                  x: x + im.horizontal + @marker_d + @marker_gap,
+                  class: "eexcharts-legend-text",
+                  x: x + im.horizontal + marker_d + @marker_gap,
                   y: y,
                   fill: color,
                   font_size: font,

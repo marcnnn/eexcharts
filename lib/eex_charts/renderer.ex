@@ -159,6 +159,7 @@ defmodule EexCharts.Renderer do
       svg_open(cfg, l, id, [
         background(cfg, l),
         title(cfg, l),
+        plot_background(cfg, l, id),
         grid_lines(cfg, l),
         if(bar?, do: zones, else: []),
         el("g", %{class: "eexcharts-inner"}, series_io),
@@ -341,6 +342,72 @@ defmodule EexCharts.Renderer do
     end
   end
 
+  # ── Plot-area background ─────────────────────────────────────────────────
+  #
+  # A solid fill or a CSS-`linear-gradient`-equivalent ramp painted across the
+  # grid rectangle, behind the grid lines and series. The gradient geometry
+  # follows the CSS spec: `angle` is measured clockwise from "to top", and the
+  # gradient line runs through the box center with length
+  # `|w·sin a| + |h·cos a|`, so the ramp matches a CSS `linear-gradient`
+  # rendered over the same rectangle.
+  @doc false
+  def plot_background(cfg, l, id) do
+    bg = cfg.grid.background
+
+    cond do
+      is_map(bg) and is_map(bg.gradient) -> gradient_background(bg, l, id)
+      is_binary(bg[:fill]) -> [plot_rect(l, bg.fill, bg.opacity)]
+      true -> []
+    end
+  end
+
+  defp gradient_background(bg, l, id) do
+    g = bg.gradient
+    angle = (g[:angle] || 180) * :math.pi() / 180
+    {sa, ca} = {:math.sin(angle), :math.cos(angle)}
+    len = abs(l.grid_w * sa) + abs(l.grid_h * ca)
+    {cx, cy} = {l.grid_x + l.grid_w / 2, l.grid_y + l.grid_h / 2}
+    # CSS y grows downward, so the "to top" direction is -y.
+    {dx, dy} = {sa * len / 2, -ca * len / 2}
+
+    grad_id = "#{id}-plot-gradient"
+
+    stops =
+      Enum.map(g[:stops] || [], fn {offset, color} ->
+        el("stop", %{offset: "#{fmt(offset)}%", "stop-color": color})
+      end)
+
+    [
+      el("defs", %{}, [
+        el(
+          "linearGradient",
+          %{
+            id: grad_id,
+            gradientUnits: "userSpaceOnUse",
+            x1: cx - dx,
+            y1: cy - dy,
+            x2: cx + dx,
+            y2: cy + dy
+          },
+          stops
+        )
+      ]),
+      plot_rect(l, "url(##{grad_id})", bg.opacity)
+    ]
+  end
+
+  defp plot_rect(l, fill, opacity) do
+    el("rect", %{
+      class: "eexcharts-plot-background",
+      x: l.grid_x,
+      y: l.grid_y,
+      width: l.grid_w,
+      height: l.grid_h,
+      fill: fill,
+      fill_opacity: opacity
+    })
+  end
+
   defp grid_lines(cfg, l) do
     if cfg.grid.show do
       dash = if cfg.grid.stroke_dash_array > 0, do: cfg.grid.stroke_dash_array
@@ -385,11 +452,13 @@ defmodule EexCharts.Renderer do
 
   defp grid_line(cfg, x1, y1, x2, y2, dash) do
     el("line", %{
+      class: "eexcharts-grid-line",
       x1: x1,
       y1: y1,
       x2: x2,
       y2: y2,
       stroke: cfg.grid.border_color,
+      stroke_width: cfg.grid.border_width,
       stroke_dasharray: dash
     })
   end
@@ -401,14 +470,43 @@ defmodule EexCharts.Renderer do
       axis_border(cfg, l),
       value_axis_labels(cfg, l),
       category_axis_labels(cfg, l, categories),
-      y_axis_title(cfg, l)
+      y_axis_title(cfg, l),
+      x_axis_title(cfg, l)
     ]
+  end
+
+  # X-axis title, centered under the plot below the category labels.
+  defp x_axis_title(cfg, l) do
+    t = cfg.xaxis.title
+
+    if t.text do
+      style = t.style
+      tick_h = if cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
+      label_h = if cfg.xaxis.labels.show, do: cfg.xaxis.labels.style.font_size + 4, else: 0
+
+      el(
+        "text",
+        %{
+          class: "eexcharts-xaxis-title",
+          x: l.grid_x + l.grid_w / 2 + t.offset_x,
+          y: l.grid_y + l.grid_h + tick_h + label_h + style.font_size + 10 + t.offset_y,
+          text_anchor: "middle",
+          fill: style.color || cfg.chart.fore_color,
+          font_size: style.font_size,
+          font_weight: style.font_weight
+        },
+        esc(t.text)
+      )
+    else
+      []
+    end
   end
 
   defp axis_border(cfg, l) do
     border =
       if cfg.xaxis.axis_border.show do
         el("line", %{
+          class: "eexcharts-axis-border",
           x1: l.grid_x,
           y1: l.grid_y + l.grid_h,
           x2: l.grid_x + l.grid_w,
@@ -424,6 +522,7 @@ defmodule EexCharts.Renderer do
       if cfg.xaxis.axis_ticks.show and not l.horizontal do
         Enum.map(x_tick_positions(l), fn x ->
           el("line", %{
+            class: "eexcharts-axis-tick",
             x1: x,
             y1: l.grid_y + l.grid_h,
             x2: x,
@@ -471,10 +570,13 @@ defmodule EexCharts.Renderer do
           do: {l.grid_x + l.grid_w + 8, "start"},
           else: {l.grid_x - 8, "end"}
 
-      Enum.map(scale.ticks, fn t ->
+      scale.ticks
+      |> Enum.with_index()
+      |> Enum.map(fn {t, i} ->
         el(
           "text",
           %{
+            class: "eexcharts-yaxis-label",
             x: x,
             y: Layout.y_for(l, t, scale),
             text_anchor: anchor,
@@ -483,7 +585,7 @@ defmodule EexCharts.Renderer do
             font_size: style.font_size,
             font_weight: style.font_weight
           },
-          esc(Layout.format_y_label(cfg, axis, t))
+          esc(Layout.format_y_label(cfg, axis, t, i))
         )
       end)
     else
@@ -530,17 +632,13 @@ defmodule EexCharts.Renderer do
 
       labels =
         Enum.map(xs.ticks, fn %{value: v, label: label} ->
-          el(
-            "text",
-            %{
-              x: Layout.x_value_pos(l, v),
-              y: l.grid_y + l.grid_h + tick_h + style.font_size + 4,
-              text_anchor: "middle",
-              fill: color,
-              font_size: style.font_size,
-              font_weight: style.font_weight
-            },
-            esc(format_x_label(cfg, label))
+          x_label_text(
+            cfg,
+            Layout.x_value_pos(l, v),
+            l.grid_y + l.grid_h + tick_h + style.font_size + 4,
+            format_x_label(cfg, label),
+            style,
+            color
           )
         end)
 
@@ -561,11 +659,15 @@ defmodule EexCharts.Renderer do
         categories |> Enum.map(&Layout.text_width(&1, style.font_size)) |> Enum.max(fn -> 0 end)
 
       # Thin labels that would overlap (ApexCharts hideOverlappingLabels).
+      # Rotated labels stack diagonally, so their horizontal footprint is only
+      # the projection of the box — and `hide_overlapping_labels: false` keeps
+      # every label regardless.
       step =
-        if l.horizontal or l.n <= 1 do
-          1
-        else
-          max(1, ceil(l.n * (max_label_w + 10) / l.grid_w))
+        cond do
+          l.horizontal or l.n <= 1 -> 1
+          not cfg.xaxis.labels.hide_overlapping_labels -> 1
+          (cfg.xaxis.labels.rotate || 0) != 0 -> 1
+          true -> max(1, ceil(l.n * (max_label_w + 10) / l.grid_w))
         end
 
       labels =
@@ -579,6 +681,7 @@ defmodule EexCharts.Renderer do
             el(
               "text",
               %{
+                class: "eexcharts-xaxis-label",
                 x: l.grid_x - 8,
                 y: Layout.category_pos(l, i),
                 text_anchor: "end",
@@ -590,17 +693,13 @@ defmodule EexCharts.Renderer do
               esc(text)
             )
           else
-            el(
-              "text",
-              %{
-                x: Layout.category_pos(l, i),
-                y: l.grid_y + l.grid_h + tick_h + style.font_size + 4,
-                text_anchor: "middle",
-                fill: color,
-                font_size: style.font_size,
-                font_weight: style.font_weight
-              },
-              esc(text)
+            x_label_text(
+              cfg,
+              Layout.category_pos(l, i),
+              l.grid_y + l.grid_h + tick_h + style.font_size + 4,
+              text,
+              style,
+              color
             )
           end
         end)
@@ -609,6 +708,39 @@ defmodule EexCharts.Renderer do
     else
       []
     end
+  end
+
+  # One bottom x-axis label, honoring `xaxis.labels.rotate` (negative angles
+  # tilt the text counter-clockwise, anchoring its right edge at the tick like
+  # ApexCharts does).
+  defp x_label_text(cfg, x, y, text, style, color) do
+    labels = cfg.xaxis.labels
+    rotate = labels.rotate || 0
+    x = x + labels.offset_x
+    y = y + labels.offset_y
+
+    {anchor, transform} =
+      if rotate == 0 do
+        {"middle", nil}
+      else
+        anchor = if rotate < 0, do: "end", else: "start"
+        {anchor, "rotate(#{fmt(rotate)} #{fmt(x)} #{fmt(y)})"}
+      end
+
+    el(
+      "text",
+      %{
+        class: "eexcharts-xaxis-label",
+        x: x,
+        y: y,
+        transform: transform,
+        text_anchor: anchor,
+        fill: color,
+        font_size: style.font_size,
+        font_weight: style.font_weight
+      },
+      esc(text)
+    )
   end
 
   defp format_x_label(cfg, c) do
@@ -637,6 +769,7 @@ defmodule EexCharts.Renderer do
       el(
         "text",
         %{
+          class: "eexcharts-yaxis-title",
           x: x,
           y: y,
           transform: "rotate(#{rotate} #{fmt(x)} #{fmt(y)})",
@@ -717,22 +850,27 @@ defmodule EexCharts.Renderer do
 
         s.data
         |> Enum.with_index()
-        |> Enum.filter(fn {v, _j} -> is_number(v) end)
-        |> Enum.map(fn {v, j} ->
-          x = Layout.category_pos(l, j) + dl.offset_x
-          y = Layout.y_for(l, v) - 10 + dl.offset_y
-          text = format_data_label(cfg, v)
+        |> point_label_positions(cfg, l, dl)
+        |> Enum.map(fn {v, j, x, y} ->
+          text = format_data_label(cfg, v, i, j)
 
+          fs = dl.style.font_size
+
+          # ApexCharts measures the rendered text and pads the box by
+          # `padding` horizontally and `padding / 2` vertically (halved again
+          # at the top) — `addBackgroundToDataLabel`.
           pill =
             if dl.background.enabled do
-              tw = Layout.text_width(text, dl.style.font_size)
-              pad = dl.background.padding
+              tw = Layout.text_width(text, fs)
+              pad_h = dl.background.padding
+              pad_v = dl.background.padding / 2
 
               el("rect", %{
-                x: x - tw / 2 - pad,
-                y: y - dl.style.font_size / 2 - pad,
-                width: tw + pad * 2,
-                height: dl.style.font_size + pad * 2,
+                class: "eexcharts-datalabel-bg",
+                x: x - tw / 2 - pad_h,
+                y: y - Layout.text_height(fs) / 2 - pad_v / 2,
+                width: tw + pad_h * 2,
+                height: Layout.text_height(fs) + pad_v,
                 rx: dl.background.border_radius,
                 fill: color,
                 fill_opacity: dl.background.opacity,
@@ -758,7 +896,7 @@ defmodule EexCharts.Renderer do
                 text_anchor: "middle",
                 dominant_baseline: "central",
                 fill: text_color,
-                font_size: dl.style.font_size,
+                font_size: fs,
                 font_weight: dl.style.font_weight,
                 class: "eexcharts-datalabel"
               },
@@ -771,6 +909,30 @@ defmodule EexCharts.Renderer do
     el("g", %{class: "eexcharts-datalabels"}, labels)
   end
 
+  # Positions for one series' point labels. Category charts place labels above
+  # the category slot; value x-axes (scatter/bubble) place them at the point,
+  # nudged by `stroke_width` the way ApexCharts' `drawDataLabel` does.
+  defp point_label_positions(indexed_data, cfg, l, dl) do
+    if Layout.value_x?(cfg) do
+      indexed_data
+      |> Enum.map(fn {v, j} ->
+        {x, y, _z} = Layout.point(v, j, Layout.x_type(cfg))
+
+        if is_number(x) and is_number(y) do
+          {v, j, Layout.x_value_pos(l, x) + dl.offset_x,
+           Layout.y_for(l, y) + dl.offset_y + dl.stroke_width}
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+    else
+      indexed_data
+      |> Enum.filter(fn {v, _j} -> is_number(v) end)
+      |> Enum.map(fn {v, j} ->
+        {v, j, Layout.category_pos(l, j) + dl.offset_x, Layout.y_for(l, v) - 10 + dl.offset_y}
+      end)
+    end
+  end
+
   defp data_label_color(dl, i, fallback) do
     case dl.style.colors do
       nil -> fallback
@@ -779,12 +941,23 @@ defmodule EexCharts.Renderer do
     end
   end
 
-  defp format_data_label(cfg, v) do
+  defp format_data_label(cfg, v), do: format_data_label(cfg, v, 0, 0)
+
+  # ApexCharts' `dataLabels.formatter(value, {seriesIndex, dataPointIndex})`:
+  # arity-2 formatters get the point's coordinates so they can label a scatter
+  # point with something other than its value (an org name, say).
+  defp format_data_label(cfg, v, i, j) do
     case cfg.data_labels.formatter do
+      f when is_function(f, 2) -> to_string(f.(v, %{series_index: i, data_point_index: j}))
       f when is_function(f, 1) -> to_string(f.(v))
-      _ -> fmt_value(v)
+      _ -> fmt_value(point_label_value(v))
     end
   end
+
+  defp point_label_value([_x, y | _]), do: y
+  defp point_label_value(%{y: y}), do: y
+  defp point_label_value(%{"y" => y}), do: y
+  defp point_label_value(v), do: v
 
   # ── Hover zones, crosshair, tooltips ─────────────────────────────────────
 
