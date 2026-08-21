@@ -149,6 +149,14 @@ defmodule EexCharts.Layout do
 
     x_scale = build_x_scale(cfg, x_range, grid_w)
 
+    # A value x-axis centers its first and last labels on the plot edges, so
+    # half of each overflows. ApexCharts reserves that overhang
+    # (`additionalPaddingXLabels` → xPadLeft/xPadRight); without it the outer
+    # labels are clipped by the SVG viewBox.
+    {x_pad_left, x_pad_right} = x_label_overhang(cfg, x_scale)
+    grid_x = grid_x + x_pad_left
+    grid_w = max(grid_w - x_pad_left - x_pad_right, 10)
+
     %__MODULE__{
       w: w,
       h: h,
@@ -214,6 +222,37 @@ defmodule EexCharts.Layout do
     end)
     |> Enum.sum()
   end
+
+  # How far the last value-axis label sticks out past the right plot edge. The
+  # first label overhangs on the left too, but the y-axis gutter already
+  # absorbs it, which is also what ApexCharts' `additionalPaddingXLabels` ends
+  # up doing for a numeric axis with y labels.
+  defp x_label_overhang(_cfg, nil), do: {0, 0}
+
+  defp x_label_overhang(cfg, %{ticks: ticks, type: type}) do
+    if cfg.xaxis.labels.show and ticks != [] and (cfg.xaxis.labels.rotate || 0) == 0 do
+      font = cfg.xaxis.labels.style.font_size
+      {0, text_width(label_text(cfg, type, List.last(ticks)), font) / 2}
+    else
+      {0, 0}
+    end
+  end
+
+  defp label_text(cfg, type, %{value: v, label: label}) do
+    input = if type == :numeric, do: v, else: label
+
+    case cfg.xaxis.labels.formatter do
+      f when is_function(f, 2) -> flatten_label(f.(input, 0))
+      f when is_function(f, 1) -> flatten_label(f.(input))
+      _ -> to_string(label)
+    end
+  end
+
+  defp flatten_label(lines) when is_list(lines) do
+    lines |> Enum.map(&to_string/1) |> Enum.max_by(&String.length/1, fn -> "" end)
+  end
+
+  defp flatten_label(text), do: to_string(text)
 
   # ── X value scale (numeric / datetime) ─────────────────────────────────────
 

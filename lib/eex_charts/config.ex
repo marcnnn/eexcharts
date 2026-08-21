@@ -43,6 +43,10 @@ defmodule EexCharts.Config do
         # `:auto` caps the rendered chart at `width` px; `false` lets it scale
         # to fill a wider container (the SVG keeps its aspect ratio).
         max_width: :auto,
+        # Extra height reserved below the chart, matching ApexCharts'
+        # `chart.parentHeightOffset` (it sets the host element's `min-height`
+        # to `height + 15`). Only applied to fixed-size charts.
+        parent_height_offset: 15,
         font_family: "Helvetica, Arial, sans-serif",
         fore_color: "#373d3f",
         background: "",
