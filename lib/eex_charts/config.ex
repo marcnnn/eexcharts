@@ -563,6 +563,17 @@ defmodule EexCharts.Config do
   @doc "Resolves the color list, falling back to the default palette."
   def colors(cfg), do: cfg[:colors] || @palette
 
+  @doc """
+  Resolves a per-series color option: ApexCharts accepts either one value or a
+  list indexed by series (`markers.colors`, `markers.strokeColors`,
+  `stroke.colors`…). A list handed straight to an SVG attribute would be
+  concatenated into one nonsense value, so always read it through here.
+  """
+  def color_for(nil, _i), do: nil
+  def color_for([], _i), do: nil
+  def color_for(list, i) when is_list(list), do: Enum.at(list, rem(i, length(list)))
+  def color_for(value, _i), do: value
+
   @doc "Color for series/slice `i`, cycling through the configured palette."
   def color_at(cfg, i) do
     colors = colors(cfg)
