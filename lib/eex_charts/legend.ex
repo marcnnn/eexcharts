@@ -93,8 +93,7 @@ defmodule EexCharts.Legend do
     {x0, y0} =
       case legend.position do
         :bottom -> {0, l.h - legend.h + 4}
-        # Centred on the title band when there is a title, else at the top.
-        :top -> {0, max((l.title_h - legend.h) / 2, 0) + 4}
+        :top -> {0, (l.grid_y - legend.h - 8 + l.title_h) |> max(l.title_h + 4)}
         :right -> {l.w - legend.w, l.grid_y + max((l.grid_h - legend.h) / 2, 0)}
       end
 
