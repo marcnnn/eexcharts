@@ -147,6 +147,10 @@ defmodule EexCharts.Config do
           rotate: 0,
           rotate_always: false,
           hide_overlapping_labels: true,
+          # Ceiling on the vertical space rotated labels may claim, matching
+          # ApexCharts' `xaxis.labels.maxHeight`. Without it a long rotated
+          # category label eats most of the plot.
+          max_height: 120,
           offset_x: 0,
           offset_y: 0,
           style: %{colors: nil, font_size: 12, font_weight: 400}
