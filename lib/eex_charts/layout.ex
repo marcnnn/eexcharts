@@ -358,9 +358,30 @@ defmodule EexCharts.Layout do
     x_for(l, 0 |> max(min) |> min(max))
   end
 
+  # Per-character advance widths in em, averaged over the common UI sans faces
+  # (Helvetica, Arial, Segoe UI, Roboto). A flat factor is too coarse: "100 %"
+  # and "Illinois" are the same length but nowhere near the same width, and the
+  # error lands directly in the axis gutters and legend item widths.
+  @narrow ~c"iljtfrI!|.,;:'`()[]{}/\\ "
+  @wide ~c"mwMW@%"
+  @upper ~c"ABCDEFGHIJKLMNOPQRSTUVXYZ0123456789"
+
   @doc "Estimated rendered width of `text` at `font_size` (px)."
   def text_width(text, font_size) do
-    String.length(to_string(text)) * font_size * 0.6
+    text
+    |> to_string()
+    |> String.to_charlist()
+    |> Enum.reduce(0.0, fn c, acc -> acc + char_em(c) end)
+    |> Kernel.*(font_size)
+  end
+
+  defp char_em(c) do
+    cond do
+      c in @narrow -> 0.31
+      c in @wide -> 0.83
+      c in @upper -> 0.62
+      true -> 0.53
+    end
   end
 
   @doc """
@@ -386,12 +407,32 @@ defmodule EexCharts.Layout do
     else
       rad = abs(rotate) * :math.pi() / 180
 
-      max_w =
+      # Measure the formatted labels: a formatter that wraps a long category
+      # onto two lines halves the box the rotation projects.
+      lines =
         categories
-        |> Enum.map(&text_width(to_string(&1), font_size))
-        |> Enum.max(fn -> 0 end)
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {c, i} -> label_lines_of(cfg, c, i) end)
 
-      max_w * :math.sin(rad) + font_size * :math.cos(rad)
+      max_w = lines |> Enum.map(&text_width(&1, font_size)) |> Enum.max(fn -> 0 end)
+      line_count = lines |> length() |> div(max(length(categories), 1)) |> max(1)
+
+      h = max_w * :math.sin(rad) + font_size * line_count * :math.cos(rad)
+      min(h, cfg.xaxis.labels.max_height || h)
+    end
+  end
+
+  defp label_lines_of(cfg, c, i) do
+    formatted =
+      case cfg.xaxis.labels.formatter do
+        f when is_function(f, 2) -> f.(c, i)
+        f when is_function(f, 1) -> f.(c)
+        _ -> c
+      end
+
+    case formatted do
+      list when is_list(list) -> Enum.map(list, &to_string/1)
+      other -> [to_string(other)]
     end
   end
 
