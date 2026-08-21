@@ -1287,9 +1287,15 @@ defmodule EexCharts.Renderer do
   end
 
   def container(cfg, params, id, svg, tooltips) do
-    max_w =
-      if cfg.chart.max_width != false and is_number(cfg.chart.width),
-        do: "max-width:#{fmt(cfg.chart.width)}px;",
+    fixed? = cfg.chart.max_width != false and is_number(cfg.chart.width)
+    max_w = if fixed?, do: "max-width:#{fmt(cfg.chart.width)}px;", else: ""
+
+    # ApexCharts reserves `parentHeightOffset` px below a fixed-size chart by
+    # raising the host element's min-height; mirror it so a chart dropped into
+    # an ApexCharts-shaped layout occupies the same box.
+    min_h =
+      if fixed? and is_number(cfg.chart.height) and cfg.chart.parent_height_offset > 0,
+        do: "min-height:#{fmt(cfg.chart.height + cfg.chart.parent_height_offset)}px;",
         else: ""
 
     el(
@@ -1300,7 +1306,7 @@ defmodule EexCharts.Renderer do
         "phx-hook": if(params[:hook] == false, do: nil, else: "EexCharts"),
         "phx-update": "replace",
         data_push_hover: params[:push_hover] || nil,
-        style: "position:relative;#{max_w}"
+        style: "position:relative;#{max_w}#{min_h}"
       },
       [svg, tooltips]
     )
