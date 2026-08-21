@@ -73,6 +73,8 @@ defmodule EexCharts.Config do
         stroke_width: 2,
         stroke_opacity: 0.9,
         fill_opacity: 1,
+        # `:circle`, `:square`, `:triangle` or `:diamond`; a list assigns one
+        # shape per series (ApexCharts `markers.shape` array form).
         shape: :circle,
         hover: %{size: nil, size_offset: 3}
       },
@@ -80,6 +82,9 @@ defmodule EexCharts.Config do
         enabled: true,
         offset_x: 0,
         offset_y: 0,
+        # Nudge applied to point labels on value x-axes, matching ApexCharts'
+        # `drawDataLabel({strokeWidth = 2})`.
+        stroke_width: 2,
         formatter: nil,
         style: %{font_size: 12, font_weight: 600, colors: nil},
         background: %{
@@ -95,10 +100,16 @@ defmodule EexCharts.Config do
       grid: %{
         show: true,
         border_color: "#e0e0e0",
+        border_width: 1,
         stroke_dash_array: 0,
         xaxis_lines: false,
         yaxis_lines: true,
-        padding: %{top: 0, right: 10, bottom: 0, left: 12}
+        padding: %{top: 0, right: 10, bottom: 0, left: 12},
+        # Plot-area background painted behind the series. `fill` takes any SVG
+        # paint value; `gradient` describes a CSS-`linear-gradient`-equivalent
+        # ramp across the plot rectangle (`angle` in CSS degrees — 0 points up,
+        # measured clockwise — and `stops` as `{offset_percent, color}`).
+        background: %{fill: nil, opacity: 1, gradient: nil}
       },
       xaxis: %{
         type: :category,
@@ -109,10 +120,16 @@ defmodule EexCharts.Config do
         range: nil,
         tick_amount: nil,
         step_size: nil,
+        title: %{text: nil, offset_x: 0, offset_y: 0, style: %{font_size: 11, font_weight: 900, color: nil}},
         labels: %{
           show: true,
           formatter: nil,
           datetime_formatter: %{},
+          rotate: 0,
+          rotate_always: false,
+          hide_overlapping_labels: true,
+          offset_x: 0,
+          offset_y: 0,
           style: %{colors: nil, font_size: 12, font_weight: 400}
         },
         axis_border: %{show: true, color: "#e0e0e0", height: 1},
@@ -146,7 +163,12 @@ defmodule EexCharts.Config do
         horizontal_align: :center,
         font_size: 12,
         font_weight: 400,
-        markers: %{size: 7, shape: :circle, stroke_width: 1},
+        # `width` caps the row-wrapping width (ApexCharts `legend.width`);
+        # `nil` wraps at the chart width.
+        width: nil,
+        offset_x: 0,
+        offset_y: 0,
+        markers: %{size: 6, shape: :circle, stroke_width: 0, stroke_color: nil, radius: nil},
         item_margin: %{horizontal: 5, vertical: 4},
         labels: %{colors: nil, use_series_colors: false}
       },
