@@ -389,7 +389,8 @@ defmodule EexCharts.Charts.Radar do
           fill_opacity: cfg.fill.opacity,
           stroke: color,
           stroke_width: cfg.stroke.width,
-          stroke_linejoin: "round",
+          # ApexCharts leaves the SVG default (miter) on radar polygons; with a
+          # thick stroke a round join visibly pulls every vertex in.
           stroke_linecap: cfg.stroke.line_cap
         }
 
