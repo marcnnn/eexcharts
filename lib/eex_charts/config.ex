@@ -98,7 +98,7 @@ defmodule EexCharts.Config do
         # `drawDataLabel({strokeWidth = 2})`.
         stroke_width: 2,
         formatter: nil,
-        style: %{font_size: 12, font_weight: 600, colors: nil},
+        style: %{font_size: 12, font_weight: 600, colors: nil, font_family: nil, font_metrics: nil},
         background: %{
           enabled: true,
           fore_color: "#fff",
@@ -136,7 +136,7 @@ defmodule EexCharts.Config do
           text: nil,
           offset_x: 0,
           offset_y: 0,
-          style: %{font_size: 12, font_weight: 900, color: nil}
+          style: %{font_size: 12, font_weight: 900, color: nil, font_family: nil, font_metrics: nil}
         },
         labels: %{
           show: true,
@@ -151,7 +151,13 @@ defmodule EexCharts.Config do
           max_height: 120,
           offset_x: 0,
           offset_y: 0,
-          style: %{colors: nil, font_size: 12, font_weight: 400}
+          style: %{
+            colors: nil,
+            font_size: 12,
+            font_weight: 400,
+            font_family: nil,
+            font_metrics: nil
+          }
         },
         axis_border: %{show: true, color: "#e0e0e0", height: 1},
         axis_ticks: %{show: true, color: "#e0e0e0", height: 6}
@@ -169,12 +175,25 @@ defmodule EexCharts.Config do
         force_nice_scale: false,
         decimals_in_float: nil,
         formatter: nil,
-        title: %{text: nil, style: %{font_size: 11, font_weight: 900, color: nil}},
+        title: %{
+          text: nil,
+          offset_x: 0,
+          offset_y: 0,
+          style: %{font_size: 11, font_weight: 900, color: nil, font_family: nil, font_metrics: nil}
+        },
         labels: %{
           show: true,
           min_width: 0,
           max_width: 160,
-          style: %{colors: nil, font_size: 11, font_weight: 400}
+          offset_x: 0,
+          offset_y: 0,
+          style: %{
+            colors: nil,
+            font_size: 11,
+            font_weight: 400,
+            font_family: nil,
+            font_metrics: nil
+          }
         }
       },
       legend: %{
@@ -184,6 +203,8 @@ defmodule EexCharts.Config do
         horizontal_align: :center,
         font_size: 12,
         font_weight: 400,
+        font_family: nil,
+        font_metrics: nil,
         # `width` caps the row-wrapping width (ApexCharts `legend.width`);
         # `nil` wraps at the chart width.
         width: nil,
