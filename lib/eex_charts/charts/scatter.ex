@@ -38,9 +38,9 @@ defmodule EexCharts.Charts.Scatter do
                 class: "eexcharts-marker",
                 data_j: j,
                 data_cx: cx,
-                fill: marker_color(cfg, s.index) || color,
+                fill: Config.color_for(cfg.markers.colors, s.index) || color,
                 fill_opacity: cfg.fill.opacity,
-                stroke: cfg.markers.stroke_colors,
+                stroke: Config.color_for(cfg.markers.stroke_colors, s.index),
                 stroke_width: cfg.markers.stroke_width,
                 stroke_opacity: cfg.markers.stroke_opacity
               })
@@ -53,15 +53,6 @@ defmodule EexCharts.Charts.Scatter do
       end)
 
     el("g", %{class: "eexcharts-scatter"}, groups)
-  end
-
-  defp marker_color(cfg, i) do
-    case cfg.markers.colors do
-      nil -> nil
-      [] -> nil
-      list when is_list(list) -> Enum.at(list, rem(i, length(list)))
-      c -> c
-    end
   end
 
   # Bubble radius scaling: zRatio = (zRange / gridHeight) * 16

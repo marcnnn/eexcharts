@@ -447,8 +447,8 @@ defmodule EexCharts.Charts.Radar do
               cx: x,
               cy: y,
               r: size,
-              fill: color,
-              stroke: cfg.markers.stroke_colors,
+              fill: Config.color_for(cfg.markers.colors, s.index) || color,
+              stroke: Config.color_for(cfg.markers.stroke_colors, s.index),
               stroke_width: cfg.markers.stroke_width
             }
 
