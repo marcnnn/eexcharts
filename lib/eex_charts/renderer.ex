@@ -712,7 +712,7 @@ defmodule EexCharts.Renderer do
           else
             x_label_text(
               cfg,
-              Layout.category_pos(l, i),
+              Layout.category_label_pos(l, i),
               l.grid_y + l.grid_h + tick_h + style.font_size + 6,
               text,
               style,

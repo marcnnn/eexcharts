@@ -338,6 +338,20 @@ defmodule EexCharts.Layout do
     end
   end
 
+  @doc """
+  Pixel position a category's axis label is anchored at.
+
+  For grouped bar-like charts this is half a bar to the left of the group's
+  centre — the tick sits on the category division, not on the drawn group,
+  which is offset by the bar width ApexCharts reserves.
+  """
+  def category_label_pos(%__MODULE__{bar_slot: slot, bar_origin: origin} = l, i)
+      when is_number(slot) do
+    origin - (origin - l.grid_x) / 2 + slot * (i + 0.5)
+  end
+
+  def category_label_pos(l, i), do: category_pos(l, i)
+
   @doc "Pixel position of the center of category slot `i` on the category axis."
   def category_pos(%__MODULE__{bar_slot: slot, bar_origin: origin} = _l, i)
       when is_number(slot) do
