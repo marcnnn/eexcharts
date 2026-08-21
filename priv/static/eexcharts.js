@@ -102,4 +102,50 @@ const EexCharts = {
   },
 };
 
+/*
+ * Companion hook for EexCharts.Live: reports the container's real pixel size
+ * so the server can lay the chart out one SVG unit per CSS pixel instead of
+ * scaling a fixed viewBox. This is the server-side equivalent of what
+ * ApexCharts does when it measures its host element.
+ */
+const Measure = {
+  mounted() {
+    this.report();
+    if (typeof ResizeObserver !== "undefined") {
+      this._ro = new ResizeObserver(() => this.schedule());
+      this._ro.observe(this.el);
+    }
+  },
+
+  updated() {
+    // A re-render can change the container (e.g. a legend wrapping onto
+    // another row); re-check, but only push when the size actually moved.
+    this.report();
+  },
+
+  destroyed() {
+    if (this._ro) this._ro.disconnect();
+    if (this._t) clearTimeout(this._t);
+  },
+
+  schedule() {
+    if (this._t) clearTimeout(this._t);
+    this._t = setTimeout(() => this.report(), 60);
+  },
+
+  report() {
+    // clientWidth/Height match what ApexCharts measures (Utils.getDimensions).
+    const w = this.el.clientWidth;
+    const h = this.el.clientHeight;
+    if (!w) return;
+    if (this._w === w && this._h === h) return;
+    this._w = w;
+    this._h = h;
+    this.pushEventTo(this.el, "measured", { width: w, height: h });
+  },
+};
+
+EexCharts.Measure = Measure;
+
 export default EexCharts;
+export { Measure as EexChartsMeasure };

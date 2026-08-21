@@ -92,14 +92,19 @@ defmodule EexCharts.Charts.Radar do
     stroke_w = if cfg.stroke.show, do: cfg.stroke.width, else: 0
 
     default_size = min(box_w, box_h)
-    size = default_size / 2.1 - stroke_w
+
+    # ApexCharts (Radar.js) subtracts the drop-shadow blur here unconditionally,
+    # even with the shadow disabled — matching it keeps the polygon radius
+    # identical.
+    blur = 4
+    size = default_size / 2.1 - stroke_w - blur
 
     # Reserve room for perimeter category labels (ApexCharts xAxisLabelsWidth).
     size =
       if cfg.xaxis.labels.show do
         max_label_w =
           categories
-          |> Enum.map(&Layout.text_width(&1, cfg.xaxis.labels.style.font_size))
+          |> Enum.map(&Layout.text_width(&1, cfg.xaxis.labels.style.font_size, Layout.metrics(cfg)))
           |> Enum.max(fn -> 0 end)
 
         size - max_label_w / 1.75
@@ -217,7 +222,9 @@ defmodule EexCharts.Charts.Radar do
           y_texts = Enum.reverse(geo.scale.ticks)
           color = y_label_color(axis.labels.style.colors, cfg.chart.fore_color)
 
-          Enum.map(0..(layers - 1), fn k ->
+          # The innermost ring has zero radius: its label would land on the
+          # spoke convergence point, where ApexCharts draws nothing.
+          Enum.map(0..(layers - 2), fn k ->
             {x, y} = spoke_point(geo, geo.size - layer_dis * k, 0)
             text = Layout.format_y_label(cfg, axis, Enum.at(y_texts, k), k)
 
