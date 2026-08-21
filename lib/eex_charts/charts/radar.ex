@@ -222,10 +222,10 @@ defmodule EexCharts.Charts.Radar do
           y_texts = Enum.reverse(geo.scale.ticks)
           color = y_label_color(axis.labels.style.colors, cfg.chart.fore_color)
 
-          # The innermost ring has zero radius: its label would land on the
-          # spoke convergence point, where ApexCharts draws nothing.
-          Enum.map(0..(layers - 2), fn k ->
+          Enum.map(0..(layers - 1), fn k ->
             {x, y} = spoke_point(geo, geo.size - layer_dis * k, 0)
+            x = x + axis.labels.offset_x
+            y = y + axis.labels.offset_y
             text = Layout.format_y_label(cfg, axis, Enum.at(y_texts, k), k)
 
             if text == "" do
