@@ -69,6 +69,7 @@ defmodule EexCharts.Live do
       assigns
       |> assign(:chart_width, chart_width(assigns))
       |> assign(:chart_height, chart_height(assigns))
+      |> then(fn a -> assign(a, :chart_options, pixel_perfect(a)) end)
 
     ~H"""
     <div
@@ -87,7 +88,7 @@ defmodule EexCharts.Live do
         labels={@labels}
         width={@chart_width}
         height={@chart_height}
-        options={@options}
+        options={@chart_options}
         on_click={@on_click}
         on_legend_click={@on_legend_click}
         hidden_series={@hidden_series}
@@ -105,6 +106,15 @@ defmodule EexCharts.Live do
      |> assign(:measured_width, positive(w))
      |> assign(:measured_height, positive(h))}
   end
+
+  # Once the size comes from a real measurement, pin the SVG to those pixels:
+  # stretching a whole-number viewBox into a fractional box re-antialiases
+  # everything away from the left edge.
+  defp pixel_perfect(%{measured_width: w} = assigns) when is_integer(w) do
+    EexCharts.Config.deep_merge(assigns.options, %{chart: %{pixel_perfect: true}})
+  end
+
+  defp pixel_perfect(assigns), do: assigns.options
 
   defp positive(v) when is_number(v) and v > 0, do: round(v)
   defp positive(_), do: nil
