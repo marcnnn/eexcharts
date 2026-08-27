@@ -1,0 +1,152 @@
+name: Visual baselines
+
+# Regenerates test/visual/baseline/*.png from scratch.
+#
+# Pixel output depends on font rendering, so baselines are only valid if they
+# are produced in the same environment that checks them. The `generate` job
+# therefore runs in the exact same container as the CI `visual` job
+# (mcr.microsoft.com/playwright:v1.49.0-noble). Never hand-generate or commit
+# baselines from a laptop.
+#
+# It deletes every existing baseline first, then runs the visual suite with
+# EEXCHARTS_REQUIRE_BASELINE unset -- assert_screenshot/3 writes a fresh image
+# whenever no baseline exists -- so the result is a full regeneration, not a
+# patch, and stale baselines for deleted examples disappear.
+#
+# The images are always uploaded as an artifact. By default a second job also
+# opens/updates a PR against the branch this workflow ran on.
+
+on:
+  workflow_dispatch:
+    inputs:
+      open_pr:
+        description: "Open (or update) a PR with the regenerated baselines"
+        type: boolean
+        default: true
+
+# Serialize: two concurrent regenerations would fight over the PR branch.
+concurrency:
+  group: visual-baselines-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Generate baselines in the Playwright image
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.49.0-noble
+    env:
+      MIX_ENV: test
+      # erlef/setup-beam can't auto-detect the OS inside a container; the
+      # Playwright "noble" image is Ubuntu 24.04.
+      ImageOS: ubuntu24
+      # Deliberately NOT setting EEXCHARTS_REQUIRE_BASELINE: this job is the one
+      # place where a missing baseline should mean "write it".
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Playwright image is minimal and ships without unzip, which
+      # setup-beam needs to unpack the Elixir precompiled archive.
+      - name: Install unzip (required by setup-beam)
+        run: apt-get update && apt-get install -y unzip
+
+      - uses: erlef/setup-beam@v1
+        with:
+          # Matches .tool-versions and the CI visual job.
+          otp-version: "28.5.0.1"
+          elixir-version: "1.19.5"
+
+      - name: Restore deps/_build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-visual-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-visual-
+
+      - run: mix deps.get
+      - run: mix deps.compile
+
+      # phoenix_test_playwright drives the Node Playwright driver from ./assets.
+      - name: Install Playwright
+        run: |
+          npm --prefix assets install playwright
+          npx --prefix assets playwright install chromium
+
+      # Full regeneration: drop every existing baseline (and any leftover diff)
+      # so the suite writes all of them fresh. `.gitkeep` is kept on purpose.
+      - name: Delete existing baselines
+        run: |
+          rm -f test/visual/baseline/*.png
+          rm -rf test/visual/baseline/__diff__
+          ls -la test/visual/baseline
+
+      - name: Seed baselines
+        run: mix test --only visual
+
+      - name: Fail if nothing was generated
+        run: |
+          count=$(find test/visual/baseline -maxdepth 1 -name '*.png' | wc -l)
+          echo "generated $count baseline(s)"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::The visual suite produced no baselines."
+            exit 1
+          fi
+
+      - name: Upload baselines artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: test/visual/baseline/*.png
+          if-no-files-found: error
+          retention-days: 30
+
+  open-pr:
+    name: Open PR with regenerated baselines
+    needs: generate
+    if: inputs.open_pr
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Clear first so baselines for examples that no longer exist are removed
+      # by the PR too, rather than lingering because the artifact just overlays.
+      - name: Clear committed baselines
+        run: rm -f test/visual/baseline/*.png
+
+      - name: Download generated baselines
+        uses: actions/download-artifact@v4
+        with:
+          name: visual-baselines
+          path: test/visual/baseline
+
+      # A fixed branch name makes reruns idempotent: create-pull-request force
+      # updates the branch and reuses the open PR instead of opening a new one.
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/visual-baselines
+          base: ${{ github.ref_name }}
+          add-paths: test/visual/baseline
+          commit-message: "Regenerate visual baselines in the Playwright image"
+          title: "Regenerate visual regression baselines"
+          body: |
+            Regenerated `test/visual/baseline/*.png` from scratch inside
+            `mcr.microsoft.com/playwright:v1.49.0-noble` (the same container the
+            CI `visual` job uses), via the `Visual baselines` workflow.
+
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Review the images before merging — this PR *is* the new definition
+            of "correct" for the pixel gate. Once merged, the CI `visual` job
+            (which runs with `EEXCHARTS_REQUIRE_BASELINE=1`) starts comparing
+            against them instead of failing on missing baselines.
+
+            Note: PRs opened with `GITHUB_TOKEN` do not trigger workflow runs,
+            so CI may not run here automatically; push an empty commit or close
+            and reopen the PR if you want the checks.
+          delete-branch: true

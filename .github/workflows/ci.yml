@@ -36,14 +36,23 @@ jobs:
       - run: mix test --exclude visual
 
   # Fuller-fidelity gate: real pixel screenshots via phoenix_test_playwright.
-  # Runs in the official Playwright image so fonts/rendering match the committed
+  # Runs in the official Playwright image so fonts/rendering match the
   # baselines (see test/visual_test.exs "Determinism").
+  #
+  # NOTE: test/visual/baseline/ holds no PNGs yet, so this job FAILS by design
+  # (see EEXCHARTS_REQUIRE_BASELINE below). Seed the baselines with the
+  # "Visual baselines" workflow and merge its PR to turn the gate green.
   visual:
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.49.0-noble
     env:
       MIX_ENV: test
+      # Strict mode: a missing baseline is a failure, not a silent
+      # seed-and-pass. Without this, an empty test/visual/baseline/ makes this
+      # job re-seed on every run and pass unconditionally -- a gate that cannot
+      # fail. Local runs leave it unset so they can still generate images.
+      EEXCHARTS_REQUIRE_BASELINE: "1"
       # erlef/setup-beam can't auto-detect the OS inside a container; the
       # Playwright "noble" image is Ubuntu 24.04.
       ImageOS: ubuntu24
@@ -80,9 +89,10 @@ jobs:
           npm --prefix assets install playwright
           npx --prefix assets playwright install chromium
 
-      # Baselines in test/visual/baseline/ are seeded once by running this same
-      # job with UPDATE=1 (which sets no baseline -> assert_screenshot saves the
-      # current screenshot) and committing the result. Thereafter this asserts.
+      # Asserts against the committed baselines in test/visual/baseline/. Those
+      # are produced by .github/workflows/visual-baselines.yml, which runs this
+      # same suite in this same container with EEXCHARTS_REQUIRE_BASELINE unset
+      # so assert_screenshot/3 writes the images, then opens a PR with them.
       - name: Visual tests
         run: mix test --only visual
 

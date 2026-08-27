@@ -265,6 +265,10 @@ change to the output is intentional, regenerate the goldens:
 EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/svg_snapshot_test.exs
 ```
 
+This layer is environment-sensitive too: coordinates serialize at full float
+precision, so a 1-ULP `:math.sin`/`:math.cos` difference between Darwin libm and
+glibc can make a golden generated on Linux CI fail on macOS (currently `n7`).
+
 **2. Pixel screenshots** (`test/visual_test.exs`, tagged `:visual`, excluded by
 default) — real headless-Chromium screenshots via
 [phoenix_test_playwright](https://hex.pm/packages/phoenix_test_playwright),
@@ -278,12 +282,37 @@ mix test --only visual        # asserts against test/visual/baseline/
 ```
 
 `assert_screenshot/3` saves a baseline on first run and compares thereafter
-(diffs land in `test/visual/baseline/__diff__/`). Because pixel output depends
-on font rendering, **baselines must be generated in the same environment they're
-checked against** — the CI `visual` job runs inside the official
-`mcr.microsoft.com/playwright` image (see `.github/workflows/ci.yml`), which is
-where the committed baselines are seeded (`mix test --only visual` with the
-baseline deleted).
+(diffs land in `test/visual/baseline/__diff__/`).
+
+#### Baselines are not committed yet
+
+`test/visual/baseline/` currently contains no `*.png`. Since a missing baseline
+makes `assert_screenshot/3` seed-and-pass, a job pointed at an empty baseline
+directory can never fail. So the CI `visual` job runs with
+`EEXCHARTS_REQUIRE_BASELINE=1`, which makes `test/visual_test.exs` assert the
+baseline file exists *before* screenshotting and fail with instructions if it
+doesn't. **That job fails until the baselines are seeded and merged — on
+purpose.** It's the difference between a real gate and a green badge.
+
+Because pixel output depends on font rendering, **baselines must be generated
+in the same environment they're checked against**, i.e. inside the official
+`mcr.microsoft.com/playwright:v1.49.0-noble` image. Don't hand-generate them or
+commit images produced on a laptop. Seed them with the `Visual baselines`
+workflow (`.github/workflows/visual-baselines.yml`):
+
+```sh
+gh workflow run visual-baselines.yml      # or Actions -> Visual baselines -> Run workflow
+```
+
+It deletes every existing baseline, re-runs the suite in that container with
+strict mode off so each screenshot is written fresh, uploads the PNGs as an
+artifact, and opens (or updates) a PR adding them. Review the images, merge,
+and the CI gate goes live. Re-run the same workflow whenever an intentional
+rendering change makes the baselines stale.
+
+Locally, leave `EEXCHARTS_REQUIRE_BASELINE` unset — `mix test --only visual`
+will still generate images you can eyeball; they just won't match CI's font
+rendering, so keep them out of commits.
 
 ## License
 
