@@ -77,8 +77,14 @@ defmodule EexCharts.Marker do
         [move(x - s, y), line(x + s, y)]
 
       _circle ->
-        [move(x, y), " m ", fmt(-size), " 0", arc(size, size, 0, 1, 0, size * 2, 0),
-         arc(size, size, 0, 1, 0, -size * 2, 0)]
+        [
+          move(x, y),
+          " m ",
+          fmt(-size),
+          " 0",
+          arc(size, size, 0, 1, 0, size * 2, 0),
+          arc(size, size, 0, 1, 0, -size * 2, 0)
+        ]
     end
   end
 

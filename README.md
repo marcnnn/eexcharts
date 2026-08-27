@@ -11,7 +11,7 @@ JS hook handles hover: it only toggles pre-rendered tooltips, positions them
 next to the cursor, and moves the crosshair. Clicks are plain `phx-click`
 bindings, so selections arrive as ordinary LiveView events.
 
-![preview](dev/preview.png)
+![preview](https://raw.githubusercontent.com/marcnnn/eexcharts/main/dev/preview.png)
 
 ## Features
 
@@ -241,9 +241,9 @@ mix run dev/preview.exs    # writes dev/preview.html, a static visual gallery
 mix dev                    # storybook catalog at http://localhost:4444/storybook
 ```
 
-All chart examples live in one place — `Dev.ChartExamples.all/0`
-(`dev/chart_examples.ex`) — shared by the preview gallery, the storybook
-stories, and both snapshot test layers, so there's no drift.
+All chart examples live in one place — `all/0` in `dev/chart_examples.ex` —
+shared by the preview gallery, the storybook stories, and both snapshot test
+layers, so there's no drift.
 
 ### Storybook catalog
 
@@ -258,8 +258,11 @@ Two layers guard against visual regressions:
 
 **1. SVG golden snapshots** (`test/svg_snapshot_test.exs`) — fast and
 browserless, part of the normal `mix test`. Each example is rendered to SVG and
-compared byte-for-byte against a committed golden in `test/snapshots/`. When a
-change to the output is intentional, regenerate the goldens:
+compared against a committed golden in `test/snapshots/`. Markup has to match
+exactly; numbers have to match numerically, because coordinates are serialised
+at full precision and the last bit of a trig result is not the same on macOS as
+on the Linux runner that seeds the goldens (see `EexCharts.SnapshotDiff`). When
+a change to the output is intentional, regenerate the goldens:
 
 ```sh
 EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/svg_snapshot_test.exs
@@ -287,7 +290,10 @@ baseline deleted).
 
 ## License
 
-MIT — see [LICENSE](LICENSE). EexCharts is a re-implementation of rendering
-logic and default styling from [ApexCharts.js](https://github.com/apexcharts/apexcharts.js)
-v4.7.0, © 2018 ApexCharts, used under the terms of its MIT license (included
-in LICENSE).
+MIT — see
+[LICENSE](https://github.com/marcnnn/eexcharts/blob/main/LICENSE).
+
+EexCharts is a re-implementation of rendering logic and default styling from
+[ApexCharts.js](https://github.com/apexcharts/apexcharts.js) v4.7.0, © 2018
+ApexCharts, used under the terms of its MIT license — reproduced in
+[NOTICE.md](NOTICE.md).

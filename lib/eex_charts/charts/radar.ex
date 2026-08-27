@@ -118,7 +118,9 @@ defmodule EexCharts.Charts.Radar do
       if cfg.xaxis.labels.show do
         max_label_w =
           categories
-          |> Enum.map(&Layout.text_width(&1, cfg.xaxis.labels.style.font_size, Layout.metrics(cfg)))
+          |> Enum.map(
+            &Layout.text_width(&1, cfg.xaxis.labels.style.font_size, Layout.metrics(cfg))
+          )
           |> Enum.max(fn -> 0 end)
 
         size - max_label_w / 1.75

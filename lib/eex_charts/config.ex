@@ -116,7 +116,13 @@ defmodule EexCharts.Config do
         # `drawDataLabel({strokeWidth = 2})`.
         stroke_width: 2,
         formatter: nil,
-        style: %{font_size: 12, font_weight: 600, colors: nil, font_family: nil, font_metrics: nil},
+        style: %{
+          font_size: 12,
+          font_weight: 600,
+          colors: nil,
+          font_family: nil,
+          font_metrics: nil
+        },
         background: %{
           enabled: true,
           fore_color: "#fff",
@@ -163,7 +169,13 @@ defmodule EexCharts.Config do
           text: nil,
           offset_x: 0,
           offset_y: 0,
-          style: %{font_size: 12, font_weight: 900, color: nil, font_family: nil, font_metrics: nil}
+          style: %{
+            font_size: 12,
+            font_weight: 900,
+            color: nil,
+            font_family: nil,
+            font_metrics: nil
+          }
         },
         labels: %{
           show: true,
@@ -206,7 +218,13 @@ defmodule EexCharts.Config do
           text: nil,
           offset_x: 0,
           offset_y: 0,
-          style: %{font_size: 11, font_weight: 900, color: nil, font_family: nil, font_metrics: nil}
+          style: %{
+            font_size: 11,
+            font_weight: 900,
+            color: nil,
+            font_family: nil,
+            font_metrics: nil
+          }
         },
         labels: %{
           show: true,

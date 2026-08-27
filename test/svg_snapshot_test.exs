@@ -4,10 +4,15 @@ defmodule EexCharts.SvgSnapshotTest do
 
   For every `Dev.ChartExamples.all/0` entry we render the chart to SVG (with
   `hook: false` so the output is stable and free of the `phx-hook` attribute)
-  and assert it byte-for-byte matches a committed golden file in
-  `test/snapshots/<id>.svg`. This catches structural/geometry regressions on
-  every commit with zero flakiness, since the renderer is a pure function of
-  its input and every example is deterministic.
+  and compare it against a committed golden file in `test/snapshots/<id>.svg`.
+  This catches structural/geometry regressions on every commit with zero
+  flakiness, since the renderer is a pure function of its input and every
+  example is deterministic.
+
+  Markup has to match exactly; numbers have to match numerically. See
+  `EexCharts.SnapshotDiff` for why that distinction earns its keep — in short,
+  the goldens carry full-precision floats, and the last bit of a `:math.cos/1`
+  result is not the same on macOS as on the Linux runner that seeds them.
 
   ## Regenerating goldens
 
@@ -16,7 +21,8 @@ defmodule EexCharts.SvgSnapshotTest do
 
       EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/svg_snapshot_test.exs
 
-  Review the resulting diff in `test/snapshots/` before committing.
+  Review the resulting diff in `test/snapshots/` before committing. Regenerate
+  on Linux if you can, so the committed floats stay the ones CI produces.
   """
   use ExUnit.Case, async: true
 
@@ -55,10 +61,18 @@ defmodule EexCharts.SvgSnapshotTest do
 
         expected = File.read!(@golden)
 
-        assert actual == expected,
-               "SVG snapshot mismatch for #{@example.id} (#{@example.title}).\n" <>
-                 "If this change is intentional, regenerate with " <>
-                 "EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test."
+        case EexCharts.SnapshotDiff.compare(actual, expected) do
+          :ok ->
+            :ok
+
+          {:error, detail} ->
+            flunk(
+              "SVG snapshot mismatch for #{@example.id} (#{@example.title}).\n\n" <>
+                detail <>
+                "\nIf this change is intentional, regenerate with " <>
+                "EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test."
+            )
+        end
       end
     end
   end

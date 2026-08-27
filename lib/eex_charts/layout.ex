@@ -242,7 +242,13 @@ defmodule EexCharts.Layout do
   defp x_label_overhang(cfg, %{ticks: ticks, type: type}) do
     if cfg.xaxis.labels.show and ticks != [] and (cfg.xaxis.labels.rotate || 0) == 0 do
       font = cfg.xaxis.labels.style.font_size
-      {0, text_width(label_text(cfg, type, List.last(ticks)), font, metrics(cfg, cfg.xaxis.labels.style)) / 2}
+
+      {0,
+       text_width(
+         label_text(cfg, type, List.last(ticks)),
+         font,
+         metrics(cfg, cfg.xaxis.labels.style)
+       ) / 2}
     else
       {0, 0}
     end
@@ -494,6 +500,7 @@ defmodule EexCharts.Layout do
         lines
         |> Enum.map(&text_width(&1, font_size, metrics(cfg, cfg.xaxis.labels.style)))
         |> Enum.max(fn -> 0 end)
+
       line_count = lines |> length() |> div(max(length(categories), 1)) |> max(1)
 
       h = max_w * :math.sin(rad) + font_size * line_count * :math.cos(rad)

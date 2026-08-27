@@ -9,8 +9,8 @@ defmodule EexCharts.Charts.RadialBar do
   the center data labels.
 
   Owns its full SVG assembly: `render_chart/3` returns the complete container
-  (svg + tooltips), like `EexCharts.Renderer.render_cartesian/3` does for
-  cartesian types.
+  (svg + tooltips), like `EexCharts.Renderer.render/1` does for cartesian
+  types.
   """
 
   import EexCharts.SVG

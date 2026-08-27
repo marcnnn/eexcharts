@@ -65,7 +65,7 @@ defmodule EexCharts.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url, "ApexCharts (original)" => "https://apexcharts.com"},
-      files: ~w(lib priv/static mix.exs README.md LICENSE)
+      files: ~w(lib priv/static mix.exs README.md CHANGELOG.md LICENSE NOTICE.md)
     ]
   end
 
@@ -73,7 +73,18 @@ defmodule EexCharts.MixProject do
     [
       main: "EexCharts",
       source_ref: "v#{@version}",
-      extras: ["README.md"]
+      # `mix docs` runs in :dev, where the storybook harness under dev/ is also
+      # compiled. Only the library belongs on HexDocs.
+      filter_modules: fn module, _metadata ->
+        match?("Elixir.EexCharts" <> _, Atom.to_string(module))
+      end,
+      extras: [
+        "README.md",
+        "CHANGELOG.md",
+        "docs/KNOWN_ISSUES.md",
+        "CONTRIBUTING.md",
+        "NOTICE.md"
+      ]
     ]
   end
 end

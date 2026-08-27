@@ -8,7 +8,18 @@ on:
 jobs:
   # Fast gate: unit tests + SVG golden snapshots. No browser, no server.
   test:
+    name: test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # mix.exs promises `elixir: "~> 1.15"`; test both ends of that range.
+        include:
+          - elixir: "1.15.8"
+            otp: "26.2.5"
+          # Matches .tool-versions.
+          - elixir: "1.19.5"
+            otp: "28.5.0.1"
     env:
       MIX_ENV: test
     steps:
@@ -16,9 +27,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          # Matches .tool-versions.
-          otp-version: "28.5.0.1"
-          elixir-version: "1.19.5"
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
 
       - name: Restore deps/_build cache
         uses: actions/cache@v4
@@ -26,11 +36,21 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-
 
       - run: mix deps.get
       - run: mix deps.compile
+
+      # Both of these are pinned to one version: formatter output and
+      # deprecation warnings both differ across Elixir releases.
+      - name: Check formatting
+        if: matrix.elixir == '1.19.5'
+        run: mix format --check-formatted
+
+      - name: Compile without warnings
+        if: matrix.elixir == '1.19.5'
+        run: mix compile --force --warnings-as-errors
 
       # SVG gate + unit tests (excludes the browser-driven :visual suite).
       - run: mix test --exclude visual
