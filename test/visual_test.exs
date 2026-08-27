@@ -29,7 +29,12 @@ defmodule EexCharts.VisualTest do
 
   @moduletag :visual
 
-  defp iframe_path(id), do: "/storybook/iframe/charts?variation_id=#{id}"
+  # The catalog is split into one story per chart family (`dev/storybook/`), so
+  # the iframe path is derived from the example's `:group` rather than being
+  # hardcoded to a single story.
+  defp iframe_path(example) do
+    "/storybook/iframe/#{Dev.ChartExamples.story_path(example)}?variation_id=#{example.id}"
+  end
 
   describe "chart screenshots" do
     for example <- Dev.ChartExamples.all() do
@@ -37,12 +42,12 @@ defmodule EexCharts.VisualTest do
 
       test "#{@example.id} — #{@example.title}", %{conn: conn} do
         conn
-        |> visit(iframe_path(@example.id))
+        |> visit(iframe_path(@example))
         |> assert_has(".eexcharts")
         # Element-scoped screenshot: just the chart's own container, so
         # storybook chrome/padding can't cause spurious diffs. Each variation
         # iframe holds exactly one chart, and phoenix_storybook rewrites the
-        # component's DOM id (to `charts-single-<id>`), so scope by the unique
+        # component's DOM id (to `<story>-single-<id>`), so scope by the unique
         # `.eexcharts` class rather than the example id.
         |> assert_screenshot("#{@example.id}.png", selector: ".eexcharts")
       end
@@ -52,7 +57,7 @@ defmodule EexCharts.VisualTest do
   describe "hook interaction" do
     test "hovering a data point activates the tooltip", %{conn: conn} do
       conn
-      |> visit(iframe_path("c1"))
+      |> visit(iframe_path(Dev.ChartExamples.fetch!("c1")))
       |> assert_has(".eexcharts")
       # The hook listens for pointermove on the container and reveals the
       # tooltip for the hovered category. Hover the transparent per-category
