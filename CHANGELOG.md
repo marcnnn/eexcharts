@@ -32,8 +32,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are published as HexDocs pages. README links that pointed at files missing
   from the package (the preview image, `LICENSE`, the edge-case test) now
   resolve on HexDocs.
-- CI runs the test suite on the oldest and newest supported Elixir, rather than
-  testing one version while `mix.exs` promised `~> 1.15`.
+- CI now checks the `elixir: "~> 1.15"` requirement instead of only asserting
+  it: the library is compiled against the floor (1.15.8/OTP 26.2.5) in a job of
+  its own, and the suite runs on both 1.18.4 and 1.19.5. The floor cannot run
+  the suite itself — `phoenix_test_playwright` pulls in `playwright_ex`, which
+  needs Elixir 1.18+ — but that is a harness constraint, not one a consumer of
+  the library inherits.
 
 ## v0.1.0 — 2026-08-21
 

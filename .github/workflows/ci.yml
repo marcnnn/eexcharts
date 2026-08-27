@@ -6,6 +6,27 @@ on:
   pull_request:
 
 jobs:
+  # Cheapest gate of all: does the library still compile on the oldest Elixir
+  # mix.exs claims to support? It can't be a full test run — the visual suite
+  # pulls in playwright_ex, which needs Elixir 1.18+ — but the claim is about
+  # what a consumer needs, and a consumer only ever compiles lib/ and the two
+  # runtime deps, both of which require ~> 1.15 themselves.
+  compile-floor:
+    name: compile (Elixir 1.15.8 / OTP 26.2.5)
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26.2.5"
+          elixir-version: "1.15.8"
+
+      - run: mix deps.get --only prod
+      - run: mix compile --warnings-as-errors
+
   # Fast gate: unit tests + SVG golden snapshots. No browser, no server.
   test:
     name: test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
@@ -13,10 +34,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # mix.exs promises `elixir: "~> 1.15"`; test both ends of that range.
+        # The ends of the range the suite can actually run on: playwright_ex
+        # requires 1.18+, and compile-floor above covers 1.15.
         include:
-          - elixir: "1.15.8"
-            otp: "26.2.5"
+          - elixir: "1.18.4"
+            otp: "27.2"
           # Matches .tool-versions.
           - elixir: "1.19.5"
             otp: "28.5.0.1"
