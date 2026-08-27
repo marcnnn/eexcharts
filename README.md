@@ -249,8 +249,41 @@ stories, and both snapshot test layers, so there's no drift.
 
 `mix dev` boots a dev-only standalone Phoenix server (nothing under `dev/` ships
 in the Hex package) hosting a [phoenix_storybook](https://hex.pm/packages/phoenix_storybook)
-catalog with one browsable variation per chart. The catalog registers the real
-`EexCharts` hook, so hover tooltips and legend toggles work there too.
+catalog. The catalog registers the real `EexCharts` hook, so hover tooltips and
+legend toggles work there too.
+
+The sidebar is the index of chart types — one story per chart family, each
+listing that family's examples by name:
+
+| Sidebar entry      | Story file                             | Chart types            |
+| ------------------ | -------------------------------------- | ---------------------- |
+| Line               | `dev/storybook/line.story.exs`          | `:line`                |
+| Area               | `dev/storybook/area.story.exs`          | `:area`                |
+| Bar & column       | `dev/storybook/bar.story.exs`           | `:bar`                 |
+| Range bar          | `dev/storybook/range_bar.story.exs`     | `:range_bar`           |
+| Scatter & bubble   | `dev/storybook/scatter.story.exs`       | `:scatter`, `:bubble`  |
+| Pie & donut        | `dev/storybook/pie.story.exs`           | `:pie`, `:donut`       |
+| Polar area         | `dev/storybook/polar_area.story.exs`    | `:polar_area`          |
+| Radial bar         | `dev/storybook/radial_bar.story.exs`    | `:radial_bar`          |
+| Radar              | `dev/storybook/radar.story.exs`         | `:radar`               |
+| Heatmap            | `dev/storybook/heatmap.story.exs`       | `:heatmap`             |
+| Treemap            | `dev/storybook/treemap.story.exs`       | `:treemap`             |
+| Candlestick        | `dev/storybook/candlestick.story.exs`   | `:candlestick`         |
+| Box plot           | `dev/storybook/box_plot.story.exs`      | `:box_plot`            |
+
+Which story an example lands in comes from its `:group` key in
+`Dev.ChartExamples.all/0`; the variation's label is its `:title`. Each story
+file is a three-liner over the shared `Dev.ChartStory` macro
+(`dev/chart_story.ex`), so adding an example is a one-line change in
+`dev/chart_examples.ex` — no story edit needed unless you are introducing a new
+chart family. Sidebar labels and ordering live in
+`dev/storybook/_root.index.exs`.
+
+`:group` also drives the storybook URLs (`/storybook/<group>`, iframe
+`/storybook/iframe/<group>?variation_id=<id>`), which is how
+`test/visual_test.exs` finds each chart. `:id` values (`c1`…`n13`) are
+independent of grouping and stay frozen — they name the committed SVG goldens
+in `test/snapshots/`.
 
 ### Visual regression testing
 
