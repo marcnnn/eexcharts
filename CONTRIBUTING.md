@@ -47,8 +47,10 @@ edge-case behavior our guard tests pin.
 ```sh
 mix deps.get
 mix test                     # unit + SVG golden tests, no browser needed
+
 mix format                   # CI gates this
 mix dev                      # storybook at http://localhost:4444
+
 ```
 
 ### Test suites
