@@ -82,6 +82,12 @@ defmodule EexCharts.Renderer do
   # rather than the emitted SVG — also means `Color.shade/2` sees plain hex
   # and never emits `color-mix()`, which rasterizers can't parse either.
 
+  # Structs travelling through the config are opaque data, not nested option
+  # maps: a `Date`/`DateTime` category, a `%Decimal{}` value. They are not
+  # enumerable, so rebuilding one with `Map.new/2` raises — and even for a
+  # struct that is, replacing it with a plain map would lose its type.
+  defp resolve_cfg_vars(%_{} = struct), do: struct
+
   defp resolve_cfg_vars(%{} = map),
     do: Map.new(map, fn {k, v} -> {k, resolve_cfg_vars(v)} end)
 
