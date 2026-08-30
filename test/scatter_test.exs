@@ -4,7 +4,8 @@ defmodule EexCharts.ScatterTest do
   alias EexCharts.Charts.Scatter
   alias EexCharts.Renderer
 
-  defp render(params), do: params |> Renderer.render() |> IO.iodata_to_binary()
+  defp render(params),
+    do: params |> Renderer.render() |> EexCharts.SVG.to_iodata() |> IO.iodata_to_binary()
 
   defp markers(html), do: length(String.split(html, "eexcharts-marker")) - 1
 

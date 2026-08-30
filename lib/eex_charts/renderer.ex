@@ -19,7 +19,11 @@ defmodule EexCharts.Renderer do
   }
 
   @doc """
-  Renders a chart to iodata (a `<div>` containing the SVG and tooltips).
+  Renders a chart to an `EexCharts.SVG` element tree (a `<div>` containing the
+  SVG and tooltips, or a bare `<svg>` under `static: true`).
+
+  Serialize it with `EexCharts.SVG.to_iodata/1`; `EexCharts.render/4` and
+  `EexCharts.to_svg/4` do that at the boundary.
 
   Params (map): `:id` (required), `:type`, `:series`, `:categories`,
   `:labels`, `:width`, `:height`, `:options`, `:on_click`, `:push_hover`,
@@ -1292,14 +1296,11 @@ defmodule EexCharts.Renderer do
 
   # Static mode wants the bare `<svg>`: no wrapper div, no hook, no tooltip
   # HTML. The `data-j`/`data-cx`/`data-cy` hover-lookup attributes are emitted
-  # unconditionally by the chart modules, so they are stripped here instead of
-  # threading a flag through every one of them. Safe as a regex because `el/3`
-  # escapes `"` inside attribute values.
+  # unconditionally by the chart modules, so they are pruned from the tree here
+  # instead of threading a flag through every one of them.
   @doc false
   def container(_cfg, %{static: true}, _id, svg, _tooltips) do
-    svg
-    |> IO.iodata_to_binary()
-    |> String.replace(~r/ data-(?:j|cx|cy)="[^"]*"/, "")
+    EexCharts.SVG.drop_attrs(svg, ~w(data-j data-cx data-cy))
   end
 
   def container(cfg, params, id, svg, tooltips) do

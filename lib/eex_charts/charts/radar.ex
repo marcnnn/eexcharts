@@ -201,7 +201,7 @@ defmodule EexCharts.Charts.Radar do
             points =
               0..(geo.n - 1)
               |> Enum.map(fn j -> spoke_point(geo, radius, j) end)
-              |> Enum.map_join(" ", fn {x, y} -> "#{fmt(x)},#{fmt(y)}" end)
+              |> points()
 
             el("polygon", %{
               points: points,
@@ -439,7 +439,7 @@ defmodule EexCharts.Charts.Radar do
         ""
 
       [{x0, y0} | rest] ->
-        [move(x0, y0), Enum.map(rest, fn {x, y} -> line(x, y) end), " Z"]
+        [move(x0, y0), Enum.map(rest, fn {x, y} -> line(x, y) end), close()]
     end
   end
 
