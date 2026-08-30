@@ -78,7 +78,7 @@ defmodule EexCharts.Charts.Radar do
     centred = %{geo | cx: 0.0, cy: 0.0}
 
     web =
-      el("g", %{transform: "translate(#{fmt(geo.cx)}, #{fmt(geo.cy)})"}, [
+      el("g", %{transform: translate(geo.cx, geo.cy)}, [
         grid_polygons(cfg, centred),
         category_labels(cfg, centred),
         series_polygons(cfg, centred, series, params),
