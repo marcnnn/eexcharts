@@ -108,6 +108,42 @@ defmodule EexCharts.StaticTest do
     end
   end
 
+  describe "structs in the config survive var() resolution" do
+    # Static mode walks the whole config resolving `var(…)` fallbacks. Rebuilding
+    # every map it meets with `Map.new/2` also tried to rebuild the `Date` a
+    # `:datetime` axis carries as a category, which is not enumerable.
+    test "Date categories on a datetime axis render" do
+      out =
+        EexCharts.to_svg("t", :line, [%{name: "A", data: [1, 2, 3]}],
+          categories: [~D[2024-01-01], ~D[2024-02-01], ~D[2024-03-01]],
+          options: %{xaxis: %{type: :datetime}}
+        )
+
+      assert out =~ "eexcharts-xaxis-label"
+      assert out =~ "Jan"
+    end
+
+    test "DateTime categories on a datetime axis render" do
+      out =
+        EexCharts.to_svg("t", :line, [%{name: "A", data: [1, 2]}],
+          categories: [~U[2024-01-01 00:00:00Z], ~U[2024-01-02 00:00:00Z]],
+          options: %{xaxis: %{type: :datetime}}
+        )
+
+      assert out =~ "<svg "
+    end
+
+    test "a struct anywhere in the options is passed through untouched" do
+      out =
+        EexCharts.to_svg("t", :line, @series,
+          categories: @categories,
+          options: %{xaxis: %{min: ~D[2024-01-01]}}
+        )
+
+      assert out =~ "<svg "
+    end
+  end
+
   describe "interactive rendering is unchanged" do
     test "render/4 keeps its hover furniture and phx bindings" do
       {:safe, io} =
