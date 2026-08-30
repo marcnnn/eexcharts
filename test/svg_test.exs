@@ -112,6 +112,23 @@ defmodule EexCharts.SVGTest do
     end
   end
 
+  describe "transform/1" do
+    test "translate keeps the comma-space separator" do
+      assert render(el("g", %{transform: translate(240, 166.5)})) ==
+               ~s|<g transform="translate(240, 166.5)"/>|
+    end
+
+    test "rotate renders angle then centre, space-separated" do
+      assert render(el("text", %{transform: rotate(-90, 315.1773, 23)})) ==
+               ~s|<text transform="rotate(-90 315.1773 23)"/>|
+    end
+
+    test "the attribute stays structured on the node" do
+      assert el("g", %{transform: translate(1, 2)}) ==
+               {:el, "g", %{transform: {:translate, 1, 2}}, nil}
+    end
+  end
+
   describe "drop_attrs/2" do
     test "removes the named attributes throughout the tree" do
       tree = el("g", %{data_j: 1}, [el("rect", %{data_cx: 2, x: 3}), el("circle", data_cy: 4)])

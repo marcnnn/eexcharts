@@ -81,6 +81,7 @@ defmodule EexCharts.Renderer do
   # resolve fallbacks to their literals config-wide. Doing it on the config —
   # rather than the emitted SVG — also means `Color.shade/2` sees plain hex
   # and never emits `color-mix()`, which rasterizers can't parse either.
+
   defp resolve_cfg_vars(%{} = map),
     do: Map.new(map, fn {k, v} -> {k, resolve_cfg_vars(v)} end)
 
@@ -736,16 +737,16 @@ defmodule EexCharts.Renderer do
   # ApexCharts does).
   defp x_label_text(cfg, x, y, text, style, color) do
     labels = cfg.xaxis.labels
-    rotate = labels.rotate || 0
+    deg = labels.rotate || 0
     x = x + labels.offset_x
     y = y + labels.offset_y
 
     {anchor, transform} =
-      if rotate == 0 do
+      if deg == 0 do
         {"middle", nil}
       else
-        anchor = if rotate < 0, do: "end", else: "start"
-        {anchor, "rotate(#{fmt(rotate)} #{fmt(x)} #{fmt(y)})"}
+        anchor = if deg < 0, do: "end", else: "start"
+        {anchor, rotate(deg, x, y)}
       end
 
     el(
@@ -804,7 +805,7 @@ defmodule EexCharts.Renderer do
       # title slightly below the plot's midline.
       x = if axis.opposite, do: l.w - style.font_size + 6, else: style.font_size - 6
       y = l.grid_y + l.grid_h / 2 + 4
-      rotate = if axis.opposite, do: 90, else: -90
+      deg = if axis.opposite, do: 90, else: -90
 
       el(
         "text",
@@ -812,7 +813,7 @@ defmodule EexCharts.Renderer do
           class: "eexcharts-yaxis-title",
           x: x + axis.title.offset_x,
           y: y + axis.title.offset_y,
-          transform: "rotate(#{rotate} #{fmt(x)} #{fmt(y)})",
+          transform: rotate(deg, x, y),
           text_anchor: "middle",
           fill: style.color || cfg.chart.fore_color,
           font_family: style.font_family,

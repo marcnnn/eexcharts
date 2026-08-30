@@ -24,6 +24,12 @@ defmodule EexCharts.SVG do
           | {:arc, number, number, number, integer, integer, number, number}
           | :close
 
+  @typedoc """
+  A `transform` attribute. Kept structured for the same reason path data is:
+  a second backend needs the numbers, not `"rotate(-90 12 34)"` to parse back.
+  """
+  @type transform :: {:translate, number, number} | {:rotate, number, number, number}
+
   @typedoc "A node of the element tree."
   @type node_t :: {:el, binary, map | keyword, term} | iodata | nil | [node_t]
 
@@ -96,6 +102,12 @@ defmodule EexCharts.SVG do
 
   defp attr_value({:points, pts}) do
     Enum.map_join(pts, " ", fn {x, y} -> [fmt(x), ",", fmt(y)] end)
+  end
+
+  defp attr_value({:translate, x, y}), do: ["translate(", fmt(x), ", ", fmt(y), ")"]
+
+  defp attr_value({:rotate, deg, x, y}) do
+    ["rotate(", fmt(deg), " ", fmt(x), " ", fmt(y), ")"]
   end
 
   defp attr_value(cmd) when is_tuple(cmd), do: path_io([cmd])
@@ -240,4 +252,10 @@ defmodule EexCharts.SVG do
 
   @doc "A `<polygon>`/`<polyline>` `points` attribute, from `{x, y}` pairs."
   def points(pairs), do: {:points, pairs}
+
+  @doc "A `transform` attribute translating by `{x, y}`."
+  def translate(x, y), do: {:translate, x, y}
+
+  @doc "A `transform` attribute rotating `deg` degrees about `{x, y}`."
+  def rotate(deg, x, y), do: {:rotate, deg, x, y}
 end
