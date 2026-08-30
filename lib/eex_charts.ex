@@ -63,6 +63,10 @@ defmodule EexCharts do
   `image()`, librsvg) and PDF pipelines. See its docs for the print-specific
   caveats (dark-mode background, fonts).
 
+  `EexCharts.PDF` skips the rasterizer entirely and draws the chart with PDF
+  operators — as a one-page document (`to_pdf/4`) or as drawing operations to
+  place in a report you are already building (`ops/4`).
+
   ## LiveView interactions
 
     * `on_click="point-selected"` — bars, slices and category zones get

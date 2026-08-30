@@ -57,7 +57,15 @@ defmodule EexCharts.MixProject do
       {:phoenix, "~> 1.7"},
       {:bandit, ">= 0.0.0", only: [:dev, :test]},
       {:jason, ">= 0.0.0", only: [:dev, :test]},
-      {:phoenix_test_playwright, "~> 0.14", only: :test, runtime: false}
+      {:phoenix_test_playwright, "~> 0.14", only: :test, runtime: false},
+
+      # `EexCharts.PDF.ops/4` returns plain tuples and needs nothing at
+      # runtime; only `to_pdf/4` and the tests that rasterize a page need the
+      # writer. Pinned to a path because the backend depends on prawn_ex's
+      # graphics-state operators (save/restore, concat_matrix, set_opacity,
+      # set_dash, curve_to, fill_stroke), which are unreleased. Once they ship
+      # this becomes an optional Hex dep: {:prawn_ex, "~> 0.6", optional: true}.
+      {:prawn_ex, path: "../prawn_ex", only: [:dev, :test]}
     ]
   end
 
