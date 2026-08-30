@@ -17,6 +17,7 @@ defmodule EexCharts.DaisyThemeTest do
     params
     |> Map.put(:options, Config.deep_merge(%{theme: %{mode: :daisy}}, params[:options] || %{}))
     |> Renderer.render()
+    |> EexCharts.SVG.to_iodata()
     |> IO.iodata_to_binary()
   end
 

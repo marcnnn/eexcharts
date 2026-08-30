@@ -75,7 +75,7 @@ defmodule EexCharts do
 
   use Phoenix.Component
 
-  alias EexCharts.Renderer
+  alias EexCharts.{Renderer, SVG}
 
   @doc """
   Renders a chart as a stateless function component.
@@ -135,21 +135,23 @@ defmodule EexCharts do
   def chart(assigns) do
     ~H"""
     {Phoenix.HTML.raw(
-      Renderer.render(%{
-        id: @id,
-        type: @type,
-        series: @series,
-        categories: @categories,
-        labels: @labels,
-        width: @width,
-        height: @height,
-        options: @options,
-        on_click: @on_click,
-        push_hover: @push_hover,
-        on_legend_click: @on_legend_click,
-        hidden_series: @hidden_series,
-        class: @class
-      })
+      SVG.to_iodata(
+        Renderer.render(%{
+          id: @id,
+          type: @type,
+          series: @series,
+          categories: @categories,
+          labels: @labels,
+          width: @width,
+          height: @height,
+          options: @options,
+          on_click: @on_click,
+          push_hover: @push_hover,
+          on_legend_click: @on_legend_click,
+          hidden_series: @hidden_series,
+          class: @class
+        })
+      )
     )}
     """
   end
@@ -167,22 +169,24 @@ defmodule EexCharts do
     opts = Map.new(opts)
 
     {:safe,
-     Renderer.render(%{
-       id: id,
-       type: type,
-       series: series,
-       categories: opts[:categories],
-       labels: opts[:labels],
-       width: opts[:width],
-       height: opts[:height],
-       options: opts[:options] || %{},
-       on_click: opts[:on_click],
-       push_hover: opts[:push_hover],
-       on_legend_click: opts[:on_legend_click],
-       hidden_series: opts[:hidden_series] || [],
-       hook: opts[:hook],
-       class: opts[:class]
-     })}
+     SVG.to_iodata(
+       Renderer.render(%{
+         id: id,
+         type: type,
+         series: series,
+         categories: opts[:categories],
+         labels: opts[:labels],
+         width: opts[:width],
+         height: opts[:height],
+         options: opts[:options] || %{},
+         on_click: opts[:on_click],
+         push_hover: opts[:push_hover],
+         on_legend_click: opts[:on_legend_click],
+         hidden_series: opts[:hidden_series] || [],
+         hook: opts[:hook],
+         class: opts[:class]
+       })
+     )}
   end
 
   @doc """
@@ -224,7 +228,7 @@ defmodule EexCharts do
   def to_svg(id, type, series, opts \\ []) do
     opts = Map.new(opts)
 
-    Renderer.render(%{
+    %{
       id: id,
       type: type,
       series: series,
@@ -235,6 +239,9 @@ defmodule EexCharts do
       options: opts[:options] || %{},
       hidden_series: opts[:hidden_series] || [],
       static: true
-    })
+    }
+    |> Renderer.render()
+    |> SVG.to_iodata()
+    |> IO.iodata_to_binary()
   end
 end
