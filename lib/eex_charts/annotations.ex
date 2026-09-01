@@ -64,7 +64,7 @@ defmodule EexCharts.Annotations do
   All user-provided label text is escaped through `EexCharts.SVG.esc/1`.
   """
 
-  import EexCharts.SVG, only: [el: 2, el: 3, esc: 1, fmt: 1]
+  import EexCharts.SVG, only: [el: 2, el: 3, esc: 1]
 
   alias EexCharts.{Config, Layout}
 
@@ -434,7 +434,7 @@ defmodule EexCharts.Annotations do
   defp rotate([], _x, _y), do: []
 
   defp rotate(io, x, y) do
-    el("g", %{transform: "rotate(-90 #{fmt(x)} #{fmt(y)})"}, io)
+    el("g", %{transform: EexCharts.SVG.rotate(-90, x, y)}, io)
   end
 
   defp vertical?(label) do

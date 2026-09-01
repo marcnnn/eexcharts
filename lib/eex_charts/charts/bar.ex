@@ -274,7 +274,7 @@ defmodule EexCharts.Charts.Bar do
   end
 
   defp rect_path(x, y, w, h) do
-    [move(x, y), line(x + w, y), line(x + w, y + h), line(x, y + h), " Z"]
+    [move(x, y), line(x + w, y), line(x + w, y + h), line(x, y + h), close()]
   end
 
   # `:end` rounds the two corners at the value end of the bar (which end that
@@ -305,7 +305,7 @@ defmodule EexCharts.Charts.Bar do
       if(bl > 0, do: arc(bl, bl, 0, 0, 1, x, y + h - bl), else: []),
       line(x, y + tl),
       if(tl > 0, do: arc(tl, tl, 0, 0, 1, x + tl, y), else: []),
-      " Z"
+      close()
     ]
   end
 end

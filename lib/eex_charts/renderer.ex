@@ -19,7 +19,11 @@ defmodule EexCharts.Renderer do
   }
 
   @doc """
-  Renders a chart to iodata (a `<div>` containing the SVG and tooltips).
+  Renders a chart to an `EexCharts.SVG` element tree (a `<div>` containing the
+  SVG and tooltips, or a bare `<svg>` under `static: true`).
+
+  Serialize it with `EexCharts.SVG.to_iodata/1`; `EexCharts.render/4` and
+  `EexCharts.to_svg/4` do that at the boundary.
 
   Params (map): `:id` (required), `:type`, `:series`, `:categories`,
   `:labels`, `:width`, `:height`, `:options`, `:on_click`, `:push_hover`,
@@ -77,6 +81,13 @@ defmodule EexCharts.Renderer do
   # resolve fallbacks to their literals config-wide. Doing it on the config —
   # rather than the emitted SVG — also means `Color.shade/2` sees plain hex
   # and never emits `color-mix()`, which rasterizers can't parse either.
+
+  # Structs travelling through the config are opaque data, not nested option
+  # maps: a `Date`/`DateTime` category, a `%Decimal{}` value. They are not
+  # enumerable, so rebuilding one with `Map.new/2` raises — and even for a
+  # struct that is, replacing it with a plain map would lose its type.
+  defp resolve_cfg_vars(%_{} = struct), do: struct
+
   defp resolve_cfg_vars(%{} = map),
     do: Map.new(map, fn {k, v} -> {k, resolve_cfg_vars(v)} end)
 
@@ -732,16 +743,16 @@ defmodule EexCharts.Renderer do
   # ApexCharts does).
   defp x_label_text(cfg, x, y, text, style, color) do
     labels = cfg.xaxis.labels
-    rotate = labels.rotate || 0
+    deg = labels.rotate || 0
     x = x + labels.offset_x
     y = y + labels.offset_y
 
     {anchor, transform} =
-      if rotate == 0 do
+      if deg == 0 do
         {"middle", nil}
       else
-        anchor = if rotate < 0, do: "end", else: "start"
-        {anchor, "rotate(#{fmt(rotate)} #{fmt(x)} #{fmt(y)})"}
+        anchor = if deg < 0, do: "end", else: "start"
+        {anchor, rotate(deg, x, y)}
       end
 
     el(
@@ -800,7 +811,7 @@ defmodule EexCharts.Renderer do
       # title slightly below the plot's midline.
       x = if axis.opposite, do: l.w - style.font_size + 6, else: style.font_size - 6
       y = l.grid_y + l.grid_h / 2 + 4
-      rotate = if axis.opposite, do: 90, else: -90
+      deg = if axis.opposite, do: 90, else: -90
 
       el(
         "text",
@@ -808,7 +819,7 @@ defmodule EexCharts.Renderer do
           class: "eexcharts-yaxis-title",
           x: x + axis.title.offset_x,
           y: y + axis.title.offset_y,
-          transform: "rotate(#{rotate} #{fmt(x)} #{fmt(y)})",
+          transform: rotate(deg, x, y),
           text_anchor: "middle",
           fill: style.color || cfg.chart.fore_color,
           font_family: style.font_family,
@@ -1292,14 +1303,11 @@ defmodule EexCharts.Renderer do
 
   # Static mode wants the bare `<svg>`: no wrapper div, no hook, no tooltip
   # HTML. The `data-j`/`data-cx`/`data-cy` hover-lookup attributes are emitted
-  # unconditionally by the chart modules, so they are stripped here instead of
-  # threading a flag through every one of them. Safe as a regex because `el/3`
-  # escapes `"` inside attribute values.
+  # unconditionally by the chart modules, so they are pruned from the tree here
+  # instead of threading a flag through every one of them.
   @doc false
   def container(_cfg, %{static: true}, _id, svg, _tooltips) do
-    svg
-    |> IO.iodata_to_binary()
-    |> String.replace(~r/ data-(?:j|cx|cy)="[^"]*"/, "")
+    EexCharts.SVG.drop_attrs(svg, ~w(data-j data-cx data-cy))
   end
 
   def container(cfg, params, id, svg, tooltips) do

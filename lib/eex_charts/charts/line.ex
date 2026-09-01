@@ -164,7 +164,7 @@ defmodule EexCharts.Charts.Line do
   end
 
   def line_path([{x0, y0} | rest], :stepline) do
-    body = Enum.map(rest, fn {x, y} -> [" H ", fmt(x), " V ", fmt(y)] end)
+    body = Enum.map(rest, fn {x, y} -> [hline(x), vline(y)] end)
     [move(x0, y0), body]
   end
 
@@ -179,7 +179,7 @@ defmodule EexCharts.Charts.Line do
   defp area_close(pts, base_y) do
     {x_first, _} = List.first(pts)
     {x_last, _} = List.last(pts)
-    [line(x_last, base_y), line(x_first, base_y), " Z"]
+    [line(x_last, base_y), line(x_first, base_y), close()]
   end
 
   # Fritsch–Carlson monotone cubic tangents, port of

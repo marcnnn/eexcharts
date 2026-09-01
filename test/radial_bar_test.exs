@@ -4,7 +4,7 @@ defmodule EexCharts.RadialBarTest do
   alias EexCharts.Renderer
 
   defp render(params) do
-    params |> Renderer.render() |> IO.iodata_to_binary()
+    params |> Renderer.render() |> EexCharts.SVG.to_iodata() |> IO.iodata_to_binary()
   end
 
   describe "radial bar charts" do

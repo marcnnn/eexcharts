@@ -39,14 +39,13 @@ defmodule EexCharts.Marker do
         [
           move(x - s, y - s),
           line(x + s, y + s),
-          " ",
           move(x - s, y + s),
           line(x + s, y - s)
         ]
 
       :plus ->
         s = size / @plus_shrink
-        [move(x - s, y), line(x + s, y), " ", move(x, y - s), line(x, y + s)]
+        [move(x - s, y), line(x + s, y), move(x, y - s), line(x, y + s)]
 
       :star ->
         star_path(x, y, size * @star_grow, 5)
@@ -55,7 +54,7 @@ defmodule EexCharts.Marker do
         star_path(x, y, size * @star_grow / @sparkle_shrink, 4)
 
       :triangle ->
-        [move(x, y - size), line(x + size, y + size), line(x - size, y + size), " Z"]
+        [move(x, y - size), line(x + size, y + size), line(x - size, y + size), close()]
 
       :square ->
         s = size / @square_shrink
@@ -65,12 +64,12 @@ defmodule EexCharts.Marker do
           line(x + s, y - s),
           line(x + s, y + s),
           line(x - s, y + s),
-          " Z"
+          close()
         ]
 
       :diamond ->
         s = size * @diamond_grow
-        [move(x, y - s), line(x + s, y), line(x, y + s), line(x - s, y), " Z"]
+        [move(x, y - s), line(x + s, y), line(x, y + s), line(x - s, y), close()]
 
       :line ->
         s = size / @line_shrink
@@ -79,9 +78,7 @@ defmodule EexCharts.Marker do
       _circle ->
         [
           move(x, y),
-          " m ",
-          fmt(-size),
-          " 0",
+          rmove(-size, 0),
           arc(size, size, 0, 1, 0, size * 2, 0),
           arc(size, size, 0, 1, 0, -size * 2, 0)
         ]
@@ -99,7 +96,7 @@ defmodule EexCharts.Marker do
       py = y - radius * :math.cos(angle)
       if i == 0, do: move(px, py), else: line(px, py)
     end)
-    |> Kernel.++([" Z"])
+    |> Kernel.++([close()])
   end
 
   @doc """

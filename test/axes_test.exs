@@ -4,7 +4,8 @@ defmodule EexCharts.AxesTest do
   alias EexCharts.{Config, Layout}
   alias EexCharts.Renderer
 
-  defp render(params), do: params |> Renderer.render() |> IO.iodata_to_binary()
+  defp render(params),
+    do: params |> Renderer.render() |> EexCharts.SVG.to_iodata() |> IO.iodata_to_binary()
 
   describe "numeric x-axis" do
     test "builds a linear x scale positioned by value" do

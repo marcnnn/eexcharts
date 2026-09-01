@@ -234,9 +234,9 @@ defmodule EexCharts.Charts.Pie do
       {ix1, iy1} = polar(geo.cx, geo.cy, geo.donut_r, end_angle)
       {ix2, iy2} = polar(geo.cx, geo.cy, geo.donut_r, s.start_angle)
 
-      [outer, line(ix1, iy1), arc(geo.donut_r, geo.donut_r, 0, large_arc, 0, ix2, iy2), " Z"]
+      [outer, line(ix1, iy1), arc(geo.donut_r, geo.donut_r, 0, large_arc, 0, ix2, iy2), close()]
     else
-      [outer, line(geo.cx, geo.cy), " Z"]
+      [outer, line(geo.cx, geo.cy), close()]
     end
   end
 
