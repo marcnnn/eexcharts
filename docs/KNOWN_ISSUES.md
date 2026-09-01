@@ -3,7 +3,7 @@
 A boundary-condition audit of this port: pathological option values, degenerate
 data, and ranges small or awkward enough to break tick generation. Every entry
 below was reproduced — or refuted — against this code, and each is pinned by a
-test in [`test/edge_cases_test.exs`](../test/edge_cases_test.exs), which runs as
+test in [`test/edge_cases_test.exs`](https://github.com/marcnnn/eexcharts/blob/main/test/edge_cases_test.exs), which runs as
 part of `mix test`.
 
 **Open: none.** All six defects found by the audit are fixed.

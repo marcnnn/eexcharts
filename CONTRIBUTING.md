@@ -47,13 +47,17 @@ edge-case behavior our guard tests pin.
 ```sh
 mix deps.get
 mix test                     # unit + SVG golden tests, no browser needed
-mix dev                      # storybook catalog at http://localhost:4444/storybook
+
+mix format                   # CI gates this
+mix dev                      # storybook at http://localhost:4444
+
 ```
 
 ### Test suites
 
-- `mix test` — unit tests plus the byte-for-byte SVG golden gate
-  (`test/svg_snapshot_test.exs`). Regenerate goldens with
+- `mix test` — unit tests plus the SVG golden gate
+  (`test/svg_snapshot_test.exs`), which compares markup exactly and numbers
+  numerically. Regenerate goldens with
   `EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/svg_snapshot_test.exs` when an
   output change is intentional.
 - `mix test --only visual` — headless-Chromium screenshot diffs. Baselines are

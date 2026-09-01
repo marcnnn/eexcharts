@@ -26,3 +26,9 @@ eexcharts-*.tar
 # Visual test artifacts (baselines are committed; actual + diffs are not)
 /test/visual/actual/
 **/__diff__/
+
+# Playwright's Node driver, installed into ./assets by the visual suite setup.
+/assets/
+
+# Local agent/editor scratch space.
+/.claude/

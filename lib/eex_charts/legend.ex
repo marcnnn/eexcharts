@@ -282,7 +282,11 @@ defmodule EexCharts.Legend do
       },
       el(
         "div",
-        %{xmlns: "http://www.w3.org/1999/xhtml", class: "eexcharts-legend-inner", style: wrapper_style},
+        %{
+          xmlns: "http://www.w3.org/1999/xhtml",
+          class: "eexcharts-legend-inner",
+          style: wrapper_style
+        },
         items
       )
     )
@@ -292,7 +296,9 @@ defmodule EexCharts.Legend do
   defp html_marker_box(cfg), do: marker_d(cfg) + 2
 
   defp html_item(item, cfg, fore, marker_box, im, font, hidden, on_click) do
-    color = if cfg.legend.labels.use_series_colors, do: Config.color_at(cfg, item.index), else: fore
+    color =
+      if cfg.legend.labels.use_series_colors, do: Config.color_at(cfg, item.index), else: fore
+
     marker_color = Config.color_at(cfg, item.index)
     stroke_w = cfg.legend.markers.stroke_width
     stroke_c = if stroke_w && stroke_w > 0, do: cfg.legend.markers.stroke_color
