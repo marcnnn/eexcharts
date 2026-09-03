@@ -69,7 +69,7 @@ defmodule EexCharts.PDF do
       points from the page's bottom-left. Defaults to `{0, 0}`.
     * `:scale` — size multiplier. Defaults to `1`.
 
-  The result is a list of `PrawnEx.Page.content_op/0` tuples. Nothing in it
+  The result is a list of `t:PrawnEx.Page.content_op/0` tuples. Nothing in it
   depends on PrawnEx being loaded.
 
   ## Example
