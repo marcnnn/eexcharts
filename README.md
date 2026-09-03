@@ -271,10 +271,10 @@ listing that family's examples by name:
 | Candlestick        | `dev/storybook/candlestick.story.exs`   | `:candlestick`         |
 | Box plot           | `dev/storybook/box_plot.story.exs`      | `:box_plot`            |
 
-Which story an example lands in comes from its `:group` key in
-`Dev.ChartExamples.all/0`; the variation's label is its `:title`. Each story
-file is a three-liner over the shared `Dev.ChartStory` macro
-(`dev/chart_story.ex`), so adding an example is a one-line change in
+Which story an example lands in comes from its `:group` key in the examples
+list (`all/0` in `dev/chart_examples.ex`); the variation's label is its
+`:title`. Each story file is a three-liner over the shared story macro in
+`dev/chart_story.ex`, so adding an example is a one-line change in
 `dev/chart_examples.ex` — no story edit needed unless you are introducing a new
 chart family. Sidebar labels and ordering live in
 `dev/storybook/_root.index.exs`.
@@ -317,9 +317,15 @@ mix test --only visual        # asserts against test/visual/baseline/
 (diffs land in `test/visual/baseline/__diff__/`). Because pixel output depends
 on font rendering, **baselines must be generated in the same environment they're
 checked against** — the CI `visual` job runs inside the official
-`mcr.microsoft.com/playwright` image (see `.github/workflows/ci.yml`), which is
-where the committed baselines are seeded (`mix test --only visual` with the
-baseline deleted).
+`mcr.microsoft.com/playwright` image (see `.github/workflows/ci.yml`), so that
+is where baselines are seeded, not on a developer machine.
+
+No baselines are committed yet, so until they are the job only seeds them: it
+annotates the run with a warning and uploads `test/visual/baseline/` as the
+`visual-baselines` artifact. To seed, download that artifact from a green run
+of `main`, commit its PNGs under `test/visual/baseline/`, and from then on the
+job asserts. Delete a baseline and repeat to re-seed it after an intentional
+change.
 
 ## License
 

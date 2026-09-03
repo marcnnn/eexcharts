@@ -39,7 +39,7 @@ jobs:
         include:
           - elixir: "1.18.4"
             otp: "27.2"
-          # Matches .tool-versions.
+          # Newest pair; the format and warning gates below are pinned to it.
           - elixir: "1.19.5"
             otp: "28.5.0.1"
     env:
@@ -122,11 +122,26 @@ jobs:
           npm --prefix assets install playwright
           npx --prefix assets playwright install chromium
 
-      # Baselines in test/visual/baseline/ are seeded once by running this same
-      # job with UPDATE=1 (which sets no baseline -> assert_screenshot saves the
-      # current screenshot) and committing the result. Thereafter this asserts.
+      # With no committed baseline for a chart, assert_screenshot saves the
+      # current screenshot and passes, so the job is a seed run rather than a
+      # gate. Say so in the run summary instead of passing quietly.
+      - name: Check for committed baselines
+        run: |
+          if ! ls test/visual/baseline/*.png >/dev/null 2>&1; then
+            echo "::warning title=Visual baselines not committed::test/visual/baseline/ has no PNGs, so this run seeds them. Download the visual-baselines artifact and commit it to turn the job into a gate."
+          fi
+
       - name: Visual tests
         run: mix test --only visual
+
+      # Seeding is: commit the PNGs from this artifact of a green run of main.
+      - name: Upload baselines
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: test/visual/baseline/*.png
+          if-no-files-found: ignore
 
       - name: Upload actual + diff artifacts on failure
         if: failure()
