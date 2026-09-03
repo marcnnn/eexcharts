@@ -4,6 +4,18 @@ Notable changes to EexCharts. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `EexCharts.PDF`: charts drawn as PDF operators, for
+  [PrawnEx](https://hex.pm/packages/prawn_ex). `ops/4` returns the drawing
+  operations as plain tuples and needs no dependency; `to_pdf/4` writes a
+  one-page document and needs `prawn_ex` with its graphics-state operators
+  (`concat_matrix`, `set_dash`, `set_line_cap`, `set_line_join`), which are not
+  yet in a Hex release. Gradients degrade to their first stop, and fill and
+  stroke share one opacity. See `EexCharts.PDF.Ops`.
+
 ## v0.1.1 — 2026-09-03
 
 ### Fixed
