@@ -8,6 +8,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `EexCharts.PDF`: charts drawn as PDF operators, for
+  [PrawnEx](https://hex.pm/packages/prawn_ex). `ops/4` returns the drawing
+  operations as plain tuples and needs no dependency; `to_pdf/4` writes a
+  one-page document and needs `prawn_ex` with its graphics-state operators
+  (`concat_matrix`, `set_dash`, `set_line_cap`, `set_line_join`), which are not
+  yet in a Hex release. Gradients degrade to their first stop, and fill and
+  stroke share one opacity. See `EexCharts.PDF.Ops`.
 - Chart types and features beyond ApexCharts v4.7.0, built from public
   release-note descriptions only (no v5+ code; provenance in
   `docs/PARITY.md`):
