@@ -4,7 +4,7 @@ Notable changes to EexCharts. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v0.1.1 — 2026-09-03
 
 ### Fixed
 
@@ -22,6 +22,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Corrected the `EexCharts.Charts.RadialBar` moduledoc, which pointed at a
   private function in `EexCharts.Renderer` and so shipped a broken link in the
   generated docs.
+- `to_svg/4` no longer crashes on a `:datetime` axis whose categories are
+  `Date` or `DateTime` values. The static-mode walk that resolves `var()`
+  fallbacks treated structs as nested option maps and tried to rebuild them.
 
 ### Changed
 
@@ -38,6 +41,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the suite itself — `phoenix_test_playwright` pulls in `playwright_ex`, which
   needs Elixir 1.18+ — but that is a harness constraint, not one a consumer of
   the library inherits.
+- Internally, charts are now built as an element tree that is serialised to
+  markup at the boundary, and `transform` attributes are structured like path
+  data. The output is byte-for-byte unchanged.
 
 ## v0.1.0 — 2026-08-21
 
