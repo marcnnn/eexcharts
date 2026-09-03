@@ -23,7 +23,7 @@ erl_crash.dump
 eexcharts-*.tar
 
 
-# Visual test artifacts (baselines are committed; actual + diffs are not)
+# Visual test artifacts (baselines are committed once seeded; actual + diffs are not)
 /test/visual/actual/
 **/__diff__/
 
@@ -32,3 +32,7 @@ eexcharts-*.tar
 
 # Local agent/editor scratch space.
 /.claude/
+
+# Generated galleries (mix run dev/preview.exs, mix run dev/daisy_preview.exs).
+/dev/preview.html
+/dev/daisy_preview.html
