@@ -35,10 +35,6 @@ bindings, so selections arrive as ordinary LiveView events.
 - **Static SVG export:** `to_svg/4` emits a bare `<svg>` for PDF pipelines
   (Typst, resvg, ChromicPDF) and image conversion — no hover furniture, no
   `phx-*` wiring, CSS variables resolved to literals
-- **Native PDF output:** `EexCharts.PDF` draws a chart with PDF operators —
-  real vectors, real text, no rasterizer to shell out to — either as a
-  one-page document or as operations to drop into a report you are already
-  building with [PrawnEx](https://hex.pm/packages/prawn_ex)
 - **LiveView-native interactivity:** `on_click` → `phx-click` with
   `phx-value-index` / `phx-value-series`; `on_legend_click` + `hidden_series`
   for legend toggling; optional `push_hover` pushes hover events to the server
@@ -236,37 +232,6 @@ Two print-specific caveats:
 - `chart.font_family` defaults to Helvetica/Arial. A rendering host without
   those fonts substitutes its own (layout is measured server-side, so labels
   stay correctly positioned); set a font the host has if typography matters.
-
-### Native PDF output
-
-```elixir
-File.write!("cpu.pdf",
-  EexCharts.PDF.to_pdf("cpu", :line, [%{name: "CPU", data: [10, 20, 15]}],
-    categories: ~w(a b c),
-    x: 40,
-    y: 450,
-    scale: 0.85
-  ))
-```
-
-draws the chart with PDF operators instead of handing an SVG to a rasterizer:
-vector paths, base-14 Helvetica text, and no external binary. `:x`/`:y` place
-the chart's bottom-left corner on the page (PDF measures in points from the
-bottom-left) and `:scale` sizes it.
-
-To place a chart inside a document you are already building, use
-`EexCharts.PDF.ops/4`, which returns the drawing operations as plain tuples —
-it needs no dependency at all:
-
-```elixir
-Enum.reduce(EexCharts.PDF.ops("cpu", :line, series, x: 40, y: 480),
-  doc, &PrawnEx.Document.append_op(&2, &1))
-```
-
-`to_pdf/4` needs the optional [`prawn_ex`](https://hex.pm/packages/prawn_ex)
-dependency. Two things do not carry over: a gradient fill degrades to its first
-stop, and fill and stroke share one opacity (PDF's alpha lives in the graphics
-state, not on the paint). See `EexCharts.PDF.Ops` for the full list.
 
 ## Development
 
