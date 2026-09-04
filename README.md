@@ -38,7 +38,8 @@ bindings, so selections arrive as ordinary LiveView events.
 - **LiveView-native interactivity:** `on_click` → `phx-click` with
   `phx-value-index` / `phx-value-series`; `on_legend_click` + `hidden_series`
   for legend toggling; optional `push_hover` pushes hover events to the server
-- **No dependencies** beyond `phoenix_live_view`
+- **No extra dependencies:** only `phoenix_live_view` and `phoenix`, which any
+  LiveView app already has
 
 ## Installation
 
