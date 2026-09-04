@@ -4,6 +4,18 @@ Notable changes to EexCharts. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- The library now compiles without warnings under Elixir 1.20's type checker.
+  Two branches it flagged were already unreachable: the heatmap legend re-tested
+  `ranges != []` in a clause the one above it had already narrowed to a non-empty
+  list, and the catch-all `in_range?/2` in `EexCharts.Annotations` sat behind
+  callers that all guard on `is_number/1` first. Both are gone; rendered output
+  is unchanged, as the SVG goldens confirm. CI runs the suite on 1.20 as well,
+  and the format and warning gates moved to it.
+
 ## v0.1.1 — 2026-09-03
 
 ### Fixed

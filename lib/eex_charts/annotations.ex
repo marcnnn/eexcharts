@@ -456,8 +456,6 @@ defmodule EexCharts.Annotations do
     v >= mn and v <= mx
   end
 
-  defp in_range?(_l, _v), do: false
-
   defp clamp(l, v) do
     {mn, mx} = scale_range(l)
     v |> max(mn) |> min(mx)
