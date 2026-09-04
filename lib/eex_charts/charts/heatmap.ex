@@ -375,7 +375,7 @@ defmodule EexCharts.Charts.Heatmap do
 
   # Ranges present: render swatches ourselves (range name + color).
   defp legend_io(cfg, l, nil, ranges, pos, legend_h, _hidden, _params) do
-    if cfg.legend.show and ranges != [] do
+    if cfg.legend.show do
       font = cfg.legend.font_size
       m = 12
       swatch = 12
