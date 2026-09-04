@@ -34,14 +34,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The ends of the range the suite can actually run on: playwright_ex
-        # requires 1.18+, and compile-floor above covers 1.15.
+        # The range the suite can actually run on: playwright_ex requires
+        # 1.18+, and compile-floor above covers 1.15. 1.19 is in the middle
+        # because it is what the visual job pins.
         include:
           - elixir: "1.18.4"
             otp: "27.2"
-          # Newest pair; the format and warning gates below are pinned to it.
           - elixir: "1.19.5"
             otp: "28.5.0.1"
+          # Newest pair; the format and warning gates below are pinned to it.
+          - elixir: "1.20.4"
+            otp: "29.0.6"
     env:
       MIX_ENV: test
     steps:
@@ -64,14 +67,15 @@ jobs:
       - run: mix deps.get
       - run: mix deps.compile
 
-      # Both of these are pinned to one version: formatter output and
-      # deprecation warnings both differ across Elixir releases.
+      # Both of these are pinned to the newest row: formatter output and
+      # the type checker's warnings both differ across Elixir releases, and
+      # the newest release is the one that flags the most.
       - name: Check formatting
-        if: matrix.elixir == '1.19.5'
+        if: matrix.elixir == '1.20.4'
         run: mix format --check-formatted
 
       - name: Compile without warnings
-        if: matrix.elixir == '1.19.5'
+        if: matrix.elixir == '1.20.4'
         run: mix compile --force --warnings-as-errors
 
       # SVG gate + unit tests (excludes the browser-driven :visual suite).
