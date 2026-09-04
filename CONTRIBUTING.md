@@ -39,8 +39,8 @@ results without warning:
 PR checklist item: *"I did not read ApexCharts v5+ source while writing this
 change."*
 
-See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the open defects and the
-edge-case behavior our guard tests pin.
+See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the defects found by the
+boundary audit, their fixes, and the edge-case behavior our guard tests pin.
 
 ## Development
 
