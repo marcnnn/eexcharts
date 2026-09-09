@@ -108,6 +108,14 @@
   filter: brightness(0.92);
 }
 
-.eexcharts-datalabel {
+/* Data labels are decoration and are painted after the series, so anything in
+   them that can take a hit test steals clicks from the mark it describes. The
+   rule used to name only `.eexcharts-datalabel`, which left
+   `.eexcharts-datalabel-bg` — the rounded plate drawn behind point labels —
+   swallowing clicks on the point it sits on. Scope it to the group so the
+   plate, the text, and anything added later are all transparent. */
+.eexcharts-datalabels,
+.eexcharts-datalabel,
+.eexcharts-datalabel-bg {
   pointer-events: none;
 }
