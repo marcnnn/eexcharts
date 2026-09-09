@@ -8,14 +8,28 @@ defmodule EexCharts.Charts.Scatter do
   `z / zRatio`, where `zRatio = (zRange / gridHeight) * 16` (clamped by the
   optional `min_bubble_radius` / `max_bubble_radius`). Every marker carries a
   `data-j` slot index so the shared tooltip/crosshair hook keeps working.
+
+  ## Clicks
+
+  Pass `on_click: "event-name"` and every marker gets `phx-click` plus
+  `phx-value-series` / `phx-value-index`, the same contract the bar and box-plot
+  renderers use. A scatter cannot reuse the hover *zones* the category charts
+  get: zones are one rect per category slot, and `Layout.value_x?/1` is true for
+  a numeric x axis, so the renderer skips them entirely. Here the marker itself
+  is the target, which is what you want anyway — a scatter point is an entity,
+  not a slot on an axis.
   """
 
   import EexCharts.SVG
 
   alias EexCharts.{Config, Layout, Marker}
 
-  @doc "Renders scatter/bubble series into the cartesian grid."
-  def render(cfg, series, %Layout{} = l, _id) do
+  @doc """
+  Renders scatter/bubble series into the cartesian grid.
+
+  Options: `:on_click` — a LiveView event name to fire per marker.
+  """
+  def render(cfg, series, %Layout{} = l, _id, opts \\ []) do
     bubble? = cfg.chart.type == :bubble
     zratio = if bubble?, do: z_ratio(series, l), else: nil
 
@@ -34,16 +48,24 @@ defmodule EexCharts.Charts.Scatter do
               cy = Layout.y_for(l, y, scale)
               r = radius(cfg, z, zratio)
 
-              Marker.render(shape, cx, cy, r, %{
-                class: "eexcharts-marker",
-                data_j: j,
-                data_cx: cx,
-                fill: Config.color_for(cfg.markers.colors, s.index) || color,
-                fill_opacity: cfg.fill.opacity,
-                stroke: Config.color_for(cfg.markers.stroke_colors, s.index),
-                stroke_width: cfg.markers.stroke_width,
-                stroke_opacity: cfg.markers.stroke_opacity
-              })
+              attrs =
+                maybe_click(
+                  %{
+                    class: "eexcharts-marker",
+                    data_j: j,
+                    data_cx: cx,
+                    fill: Config.color_for(cfg.markers.colors, s.index) || color,
+                    fill_opacity: cfg.fill.opacity,
+                    stroke: Config.color_for(cfg.markers.stroke_colors, s.index),
+                    stroke_width: cfg.markers.stroke_width,
+                    stroke_opacity: cfg.markers.stroke_opacity
+                  },
+                  opts[:on_click],
+                  s.index,
+                  j
+                )
+
+              Marker.render(shape, cx, cy, r, attrs)
             else
               []
             end
@@ -53,6 +75,19 @@ defmodule EexCharts.Charts.Scatter do
       end)
 
     el("g", %{class: "eexcharts-scatter"}, groups)
+  end
+
+  # Same attribute contract as Bar/BoxPlot: the handler gets both indexes, so a
+  # caller can map (series, index) back to whatever entity the point stands for.
+  defp maybe_click(attrs, nil, _i, _j), do: attrs
+
+  defp maybe_click(attrs, event, i, j) do
+    Map.merge(attrs, %{
+      "phx-click" => event,
+      "phx-value-series" => i,
+      "phx-value-index" => j,
+      cursor: "pointer"
+    })
   end
 
   # Bubble radius scaling: zRatio = (zRange / gridHeight) * 16

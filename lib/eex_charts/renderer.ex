@@ -148,7 +148,7 @@ defmodule EexCharts.Renderer do
           Charts.RangeBar.render(cfg, series, l, on_click: params[:on_click])
 
         t when t in [:scatter, :bubble] ->
-          Charts.Scatter.render(cfg, series, l, id)
+          Charts.Scatter.render(cfg, series, l, id, on_click: params[:on_click])
 
         _ ->
           Charts.Line.render(cfg, series, l, id)

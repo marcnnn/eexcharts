@@ -29,6 +29,55 @@ defmodule EexCharts.ScatterTest do
       assert markers(html) == 3
     end
 
+    test "on_click wires phx-click with index and series on every marker" do
+      html =
+        render(%{
+          id: "sc-click",
+          type: :scatter,
+          series: [
+            %{name: "A", data: [[1, 10], [2, 20]]},
+            %{name: "B", data: [[3, 30]]}
+          ],
+          on_click: "pick"
+        })
+
+      assert html =~ ~s(phx-click="pick")
+      assert html =~ ~s(cursor="pointer")
+
+      # Both indexes, so a handler can map (series, index) back to an entity.
+      assert html =~ ~s(phx-value-series="0")
+      assert html =~ ~s(phx-value-index="1")
+      assert html =~ ~s(phx-value-series="1")
+
+      # Every marker is a target, not just the first of each series.
+      assert length(Regex.scan(~r/phx-click="pick"/, html)) == 3
+    end
+
+    test "markers carry no click attributes without on_click" do
+      html =
+        render(%{id: "sc-noclick", type: :scatter, series: [%{name: "A", data: [[1, 10]]}]})
+
+      refute html =~ "phx-click"
+      refute html =~ ~s(cursor="pointer")
+    end
+
+    test "non-circle marker shapes are clickable too" do
+      # Circles render as <circle>, everything else as <path>; the click attrs
+      # are merged before Marker.render picks the element, so both carry them.
+      html =
+        render(%{
+          id: "sc-shape",
+          type: :scatter,
+          series: [%{name: "A", data: [[1, 10]]}],
+          options: %{markers: %{shape: :triangle}},
+          on_click: "pick"
+        })
+
+      assert html =~ "<path"
+      refute html =~ "<circle"
+      assert html =~ ~s(phx-click="pick")
+    end
+
     test "markers carry data-j for the tooltip hook" do
       html =
         render(%{id: "sc3", type: :scatter, series: [%{name: "A", data: [[1, 10], [2, 20]]}]})
