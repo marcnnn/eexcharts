@@ -273,6 +273,23 @@ defmodule Dev.ChartExamples do
         height: 360
       },
       %{
+        id: "n14",
+        title: "Radar — wrapped category labels",
+        group: :radar,
+        type: :radar,
+        series: [
+          %{name: "Current", data: [62, 38, 30, 70, 78, 74, 40, 30, 58, 64, 72, 50]},
+          %{name: "Target", data: [45, 35, 22, 56, 64, 64, 46, 28, 44, 56, 60, 40]}
+        ],
+        categories: long_radar_categories(),
+        width: 560,
+        height: 460,
+        options: %{
+          xaxis: %{labels: %{formatter: &__MODULE__.split_in_two/1}},
+          yaxis: %{show: false}
+        }
+      },
+      %{
         id: "n8",
         title: "Heatmap",
         group: :heatmap,
@@ -402,4 +419,42 @@ defmodule Dev.ChartExamples do
   added here for bookkeeping has to be dropped in this function too.
   """
   def attributes(example), do: Map.drop(example, [:title, :group])
+
+  defp long_radar_categories do
+    [
+      "Asset Inventory and Tracking",
+      "Software Inventory",
+      "Data Protection",
+      "Secure Configuration of Devices and Software",
+      "Account Management",
+      "Access Control Management",
+      "Vulnerability Management",
+      "Audit Log Management",
+      "Email and Browser Protection",
+      "Malware Defenses",
+      "Data Recovery",
+      "Network Infrastructure Management"
+    ]
+  end
+
+  @doc false
+  # Wraps a label onto two lines at the word boundary nearest its middle;
+  # labels of up to two words stay on one line.
+  def split_in_two(label) do
+    words = String.split(label)
+
+    if length(words) <= 2 do
+      label
+    else
+      half = String.length(label) / 2
+
+      cut =
+        Enum.min_by(1..(length(words) - 1), fn k ->
+          abs(String.length(Enum.join(Enum.take(words, k), " ")) - half)
+        end)
+
+      {first, rest} = Enum.split(words, cut)
+      [Enum.join(first, " "), Enum.join(rest, " ")]
+    end
+  end
 end
