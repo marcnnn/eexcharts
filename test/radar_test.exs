@@ -223,4 +223,42 @@ defmodule EexCharts.RadarTest do
       assert radius(html) <= 100 - 10 - font_size * (0.6 + 1.2 * 2) + 0.001
     end
   end
+
+  describe "multi-line label placement" do
+    # Four spokes: N (top), E (side), S (bottom), W (side).
+    defp four_spoke(lines) do
+      render(%{
+        id: "rm",
+        type: :radar,
+        series: [%{name: "S1", data: [1, 2, 3, 4]}],
+        categories: ~w(N E S W),
+        options: %{xaxis: %{labels: %{formatter: fn c -> Enum.map(1..lines, &"#{c}#{&1}") end}}}
+      })
+    end
+
+    defp first_tspan(html, index) do
+      [text] = Regex.run(~r/<text [^>]*data-index="#{index}"[^>]*>.*?<\/text>/, html)
+      [tspan] = Regex.run(~r/<tspan [^>]*>/, text)
+      tspan
+    end
+
+    test "the top label grows upward so its last line sits on the anchor" do
+      assert first_tspan(four_spoke(2), 0) =~ ~s(dy="-1.2em")
+      assert first_tspan(four_spoke(3), 0) =~ ~s(dy="-2.4em")
+    end
+
+    test "side labels are centred on their spoke" do
+      assert first_tspan(four_spoke(2), 1) =~ ~s(dy="-0.6em")
+      assert first_tspan(four_spoke(3), 3) =~ ~s(dy="-1.2em")
+    end
+
+    test "the bottom label grows downward from the anchor" do
+      refute first_tspan(four_spoke(2), 2) =~ "dy="
+    end
+
+    test "single-line labels are not shifted" do
+      refute first_tspan(four_spoke(1), 0) =~ "dy="
+      refute first_tspan(four_spoke(1), 1) =~ "dy="
+    end
+  end
 end
