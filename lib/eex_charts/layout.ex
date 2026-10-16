@@ -13,7 +13,7 @@ defmodule EexCharts.Layout do
   full per-axis lists.
   """
 
-  alias EexCharts.{Config, FontMetrics, Legend, Scale, SVG, TimeScale}
+  alias EexCharts.{Config, FontMetrics, LabelText, Legend, Scale, SVG, TimeScale}
 
   defstruct w: 600,
             h: 350,
@@ -207,8 +207,8 @@ defmodule EexCharts.Layout do
         scale.ticks
         |> Enum.with_index()
         |> Enum.map(fn {t, i} ->
-          text_width(
-            format_y_label(cfg, axis, t, i),
+          LabelText.width(
+            y_label(cfg, axis, t, i),
             axis.labels.style.font_size,
             metrics(cfg, axis.labels.style)
           )
@@ -244,7 +244,7 @@ defmodule EexCharts.Layout do
       font = cfg.xaxis.labels.style.font_size
 
       {0,
-       text_width(
+       LabelText.width(
          label_text(cfg, type, List.last(ticks)),
          font,
          metrics(cfg, cfg.xaxis.labels.style)
@@ -258,17 +258,11 @@ defmodule EexCharts.Layout do
     input = if type == :numeric, do: v, else: label
 
     case cfg.xaxis.labels.formatter do
-      f when is_function(f, 2) -> flatten_label(f.(input, 0))
-      f when is_function(f, 1) -> flatten_label(f.(input))
-      _ -> to_string(label)
+      f when is_function(f, 2) -> f.(input, 0)
+      f when is_function(f, 1) -> f.(input)
+      _ -> label
     end
   end
-
-  defp flatten_label(lines) when is_list(lines) do
-    lines |> Enum.map(&to_string/1) |> Enum.max_by(&String.length/1, fn -> "" end)
-  end
-
-  defp flatten_label(text), do: to_string(text)
 
   # ── X value scale (numeric / datetime) ─────────────────────────────────────
 
@@ -491,34 +485,33 @@ defmodule EexCharts.Layout do
 
       # Measure the formatted labels: a formatter that wraps a long category
       # onto two lines halves the box the rotation projects.
-      lines =
+      labels =
         categories
         |> Enum.with_index()
-        |> Enum.flat_map(fn {c, i} -> label_lines_of(cfg, c, i) end)
+        |> Enum.map(fn {c, i} -> format_x_label(cfg, c, i) end)
 
       max_w =
-        lines
-        |> Enum.map(&text_width(&1, font_size, metrics(cfg, cfg.xaxis.labels.style)))
+        labels
+        |> Enum.map(&LabelText.width(&1, font_size, metrics(cfg, cfg.xaxis.labels.style)))
         |> Enum.max(fn -> 0 end)
 
-      line_count = lines |> length() |> div(max(length(categories), 1)) |> max(1)
+      line_count =
+        labels
+        |> Enum.map(&LabelText.line_count/1)
+        |> Enum.sum()
+        |> div(max(length(categories), 1))
+        |> max(1)
 
       h = max_w * :math.sin(rad) + font_size * line_count * :math.cos(rad)
       min(h, cfg.xaxis.labels.max_height || h)
     end
   end
 
-  defp label_lines_of(cfg, c, i) do
-    formatted =
-      case cfg.xaxis.labels.formatter do
-        f when is_function(f, 2) -> f.(c, i)
-        f when is_function(f, 1) -> f.(c)
-        _ -> c
-      end
-
-    case formatted do
-      list when is_list(list) -> Enum.map(list, &to_string/1)
-      other -> [to_string(other)]
+  defp format_x_label(cfg, c, i) do
+    case cfg.xaxis.labels.formatter do
+      f when is_function(f, 2) -> f.(c, i)
+      f when is_function(f, 1) -> f.(c)
+      _ -> c
     end
   end
 
@@ -534,13 +527,20 @@ defmodule EexCharts.Layout do
   """
   def format_y_label(cfg, axis, v), do: format_y_label(cfg, axis, v, 0)
 
-  def format_y_label(_cfg, axis, v, i) do
+  def format_y_label(cfg, axis, v, i), do: LabelText.plain(y_label(cfg, axis, v, i))
+
+  @doc """
+  A y-axis tick label as the formatter returned it: a string, or lines and
+  styled segments for `EexCharts.LabelText` to draw. `format_y_label/4` is the
+  same label as plain text.
+  """
+  def y_label(_cfg, axis, v, i) do
     cond do
       is_function(axis.formatter, 2) ->
-        to_string(axis.formatter.(v, i))
+        axis.formatter.(v, i)
 
       is_function(axis.formatter, 1) ->
-        to_string(axis.formatter.(v))
+        axis.formatter.(v)
 
       is_integer(axis.decimals_in_float) and is_float(v) ->
         :erlang.float_to_binary(v, decimals: axis.decimals_in_float)

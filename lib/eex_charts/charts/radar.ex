@@ -13,7 +13,7 @@ defmodule EexCharts.Charts.Radar do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Layout, Legend, Renderer, Scale}
+  alias EexCharts.{Config, LabelText, Layout, Legend, Renderer, Scale}
 
   @doc "Renders the complete radar chart container."
   def render_chart(cfg, params, id) do
@@ -121,22 +121,21 @@ defmodule EexCharts.Charts.Radar do
         font_size = cfg.xaxis.labels.style.font_size
         metrics = Layout.metrics(cfg)
 
-        lines =
+        labels =
           categories
           |> Enum.with_index()
-          |> Enum.map(fn {c, j} -> label_lines(format_x_label(cfg, c, j)) end)
+          |> Enum.map(fn {c, j} -> format_x_label(cfg, c, j) end)
 
         max_label_w =
-          lines
-          |> Enum.concat()
-          |> Enum.map(&Layout.text_width(&1, font_size, metrics))
+          labels
+          |> Enum.map(&LabelText.width(&1, font_size, metrics))
           |> Enum.max(fn -> 0 end)
 
         size = size - max_label_w / 1.75
 
         # Wrapped labels on the top and bottom spokes stack vertically, so the
         # radius also has to leave them room above and below the plot.
-        case extra_vertical_lines(lines, n) do
+        case extra_vertical_lines(labels, n) do
           0 -> size
           extra -> min(size, box_h / 2 - 10 - font_size * (0.6 + 1.2 * extra))
         end
@@ -328,7 +327,7 @@ defmodule EexCharts.Charts.Radar do
               class: "eexcharts-xaxis-label",
               data_index: j
             },
-            label_content(format_x_label(cfg, label, j), lx, side)
+            LabelText.content(format_x_label(cfg, label, j), lx, grow(side))
           )
         end)
 
@@ -338,27 +337,12 @@ defmodule EexCharts.Charts.Radar do
     end
   end
 
-  # A formatter may return a list of lines; each extra line becomes a `tspan`
-  # one line-height below the previous, anchored at the same x. The first line
-  # is shifted so the block sits on the anchor the way one line would: centred
+  # A multi-line label sits on its anchor the way one line would: centred
   # beside a side spoke, growing upward off the top spoke (its last line on the
   # anchor) and downward off the bottom one.
-  defp label_content([_ | _] = lines, x, side) do
-    lines
-    |> Enum.with_index()
-    |> Enum.map(fn {line, i} ->
-      dy = if i == 0, do: first_line_dy(length(lines), side), else: "1.2em"
-      el("tspan", %{x: x, dy: dy}, esc(to_string(line)))
-    end)
-  end
-
-  defp label_content([], _x, _side), do: []
-  defp label_content(text, _x, _side), do: esc(to_string(text))
-
-  defp first_line_dy(1, _side), do: nil
-  defp first_line_dy(_n, :bottom), do: nil
-  defp first_line_dy(n, :top), do: "#{fmt_value(-(n - 1) * 1.2)}em"
-  defp first_line_dy(n, :side), do: "#{fmt_value(-(n - 1) * 0.6)}em"
+  defp grow(:side), do: :center
+  defp grow(:top), do: :up
+  defp grow(:bottom), do: :down
 
   # `xaxis.labels.offset_y` may be a function of the spoke index, so a single
   # label (e.g. the bottom vertex) can be nudged clear of the plot.
@@ -371,7 +355,7 @@ defmodule EexCharts.Charts.Radar do
   end
 
   # Ported from Radar.getTextPos: nudge labels away from the perimeter. Also
-  # reports which way a multi-line label should grow (see `label_content/3`).
+  # reports which side of the plot the label is on (see `grow/1`).
   defp text_pos(dx, dy, size) do
     limit = 10
 
@@ -398,7 +382,8 @@ defmodule EexCharts.Charts.Radar do
     |> Enum.filter(fn {_c, j} -> j < geo.n end)
   end
 
-  # A formatter may return a string or a list of lines, whatever its arity.
+  # A formatter may return anything `EexCharts.LabelText` draws, whatever its
+  # arity.
   defp format_x_label(cfg, label, j) do
     case cfg.xaxis.labels.formatter do
       f when is_function(f, 2) -> f.(label, j)
@@ -407,17 +392,15 @@ defmodule EexCharts.Charts.Radar do
     end
   end
 
-  defp label_lines(lines) when is_list(lines), do: Enum.map(lines, &to_string/1)
-  defp label_lines(text), do: [to_string(text)]
-
   # Lines beyond the first on the spokes pointing straight up (spoke 0) and,
   # for an even spoke count, straight down.
-  defp extra_vertical_lines(lines, n) do
+  defp extra_vertical_lines(labels, n) do
     vertical = if rem(n, 2) == 0, do: [0, div(n, 2)], else: [0]
 
     vertical
-    |> Enum.map(fn j -> length(Enum.at(lines, j, [""])) - 1 end)
+    |> Enum.map(fn j -> LabelText.line_count(Enum.at(labels, j, "")) - 1 end)
     |> Enum.max()
+    |> max(0)
   end
 
   defp label_color([c | _]) when is_binary(c), do: c

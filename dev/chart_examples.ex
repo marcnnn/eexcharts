@@ -311,6 +311,38 @@ defmodule Dev.ChartExamples do
         }
       },
       %{
+        id: "n16",
+        title: "Radar — styled label keys",
+        group: :radar,
+        type: :radar,
+        series: [
+          %{name: "Current", data: [62, 38, 30, 70, 78, 74, 40, 30, 58, 64, 72, 50]},
+          %{name: "Target", data: [45, 35, 22, 56, 64, 64, 46, 28, 44, 56, 60, 40]}
+        ],
+        categories: long_radar_categories(),
+        width: 560,
+        height: 460,
+        options: %{
+          xaxis: %{labels: %{formatter: &__MODULE__.keyed_label/2}},
+          yaxis: %{show: false}
+        }
+      },
+      %{
+        id: "n17",
+        title: "Columns — styled axis labels",
+        group: :bar,
+        type: :bar,
+        series: [
+          %{name: "Opened", data: [42, 31, 58, 24]},
+          %{name: "Resolved", data: [38, 29, 41, 22]}
+        ],
+        categories: ["Access Control", "Data Protection", "Malware Defenses", "Data Recovery"],
+        options: %{
+          xaxis: %{labels: %{formatter: &__MODULE__.keyed_label/2}},
+          yaxis: %{formatter: &__MODULE__.with_unit/1}
+        }
+      },
+      %{
         id: "n8",
         title: "Heatmap",
         group: :heatmap,
@@ -457,6 +489,23 @@ defmodule Dev.ChartExamples do
       "Network Infrastructure Management"
     ]
   end
+
+  @doc false
+  # Prefixes a label with its two-digit key in bold accent red, then wraps it
+  # like `split_in_two/1`. The key keeps its own style on the first line.
+  def keyed_label(label, j) do
+    key = %{text: String.pad_leading("#{j + 1}", 2, "0"), fill: "#FF4560", font_weight: 700}
+
+    case split_in_two(label) do
+      [first | rest] -> [[key, " ", first] | rest]
+      one_line -> [[key, " ", one_line]]
+    end
+  end
+
+  @doc false
+  # A y tick with a muted unit after the number.
+  def with_unit(v),
+    do: [[EexCharts.SVG.fmt_value(v), %{text: " tickets", fill: "#999999", font_size: 10}]]
 
   @doc false
   # Wraps a label onto two lines at the word boundary nearest its middle;
