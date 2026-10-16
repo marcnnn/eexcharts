@@ -310,7 +310,7 @@ defmodule EexCharts.Charts.Radar do
         categories_with_index(geo)
         |> Enum.map(fn {label, j} ->
           {x, y} = spoke_point(geo, geo.size, j)
-          {anchor, nx, ny} = text_pos(x - geo.cx, y - geo.cy, geo.size)
+          {anchor, nx, ny, side} = text_pos(x - geo.cx, y - geo.cy, geo.size)
 
           lx = geo.cx + nx
           ly = geo.cy + ny + label_offset_y(cfg, j)
@@ -328,7 +328,7 @@ defmodule EexCharts.Charts.Radar do
               class: "eexcharts-xaxis-label",
               data_index: j
             },
-            label_content(format_x_label(cfg, label, j), lx)
+            label_content(format_x_label(cfg, label, j), lx, side)
           )
         end)
 
@@ -339,16 +339,26 @@ defmodule EexCharts.Charts.Radar do
   end
 
   # A formatter may return a list of lines; each extra line becomes a `tspan`
-  # one line-height below the previous, anchored at the same x.
-  defp label_content(lines, x) when is_list(lines) do
+  # one line-height below the previous, anchored at the same x. The first line
+  # is shifted so the block sits on the anchor the way one line would: centred
+  # beside a side spoke, growing upward off the top spoke (its last line on the
+  # anchor) and downward off the bottom one.
+  defp label_content([_ | _] = lines, x, side) do
     lines
     |> Enum.with_index()
     |> Enum.map(fn {line, i} ->
-      el("tspan", %{x: x, dy: if(i == 0, do: nil, else: "1.2em")}, esc(to_string(line)))
+      dy = if i == 0, do: first_line_dy(length(lines), side), else: "1.2em"
+      el("tspan", %{x: x, dy: dy}, esc(to_string(line)))
     end)
   end
 
-  defp label_content(text, _x), do: esc(to_string(text))
+  defp label_content([], _x, _side), do: []
+  defp label_content(text, _x, _side), do: esc(to_string(text))
+
+  defp first_line_dy(1, _side), do: nil
+  defp first_line_dy(_n, :bottom), do: nil
+  defp first_line_dy(n, :top), do: "#{fmt_value(-(n - 1) * 1.2)}em"
+  defp first_line_dy(n, :side), do: "#{fmt_value(-(n - 1) * 0.6)}em"
 
   # `xaxis.labels.offset_y` may be a function of the spoke index, so a single
   # label (e.g. the bottom vertex) can be nudged clear of the plot.
@@ -360,7 +370,8 @@ defmodule EexCharts.Charts.Radar do
     end
   end
 
-  # Ported from Radar.getTextPos: nudge labels away from the perimeter.
+  # Ported from Radar.getTextPos: nudge labels away from the perimeter. Also
+  # reports which way a multi-line label should grow (see `label_content/3`).
   defp text_pos(dx, dy, size) do
     limit = 10
 
@@ -371,14 +382,14 @@ defmodule EexCharts.Charts.Radar do
         true -> {"end", dx - 10}
       end
 
-    ny =
+    {ny, side} =
       cond do
-        abs(dy) < size - limit -> dy
-        dy < 0 -> dy - 10
-        true -> dy + 10
+        abs(dy) < size - limit -> {dy, :side}
+        dy < 0 -> {dy - 10, :top}
+        true -> {dy + 10, :bottom}
       end
 
-    {anchor, nx, ny}
+    {anchor, nx, ny, side}
   end
 
   defp categories_with_index(geo) do
