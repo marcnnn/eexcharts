@@ -290,6 +290,28 @@ defmodule Dev.ChartExamples do
         }
       },
       %{
+        id: "n18",
+        title: "Annotations on a numeric x-axis",
+        group: :scatter,
+        type: :scatter,
+        series: [
+          %{name: "Team A", data: [[8, 34], [18, 52], [27, 59], [39, 48], [47, 72], [63, 66]]},
+          %{name: "Team B", data: [[12, 22], [33, 38], [52, 44], [71, 84], [80, 62], [91, 78]]}
+        ],
+        options: %{
+          xaxis: %{min: 0, max: 100},
+          yaxis: %{min: 0, max: 100, tick_amount: 5},
+          annotations: %{
+            yaxis: [%{y: 60, border_color: "#00E396", label: %{text: "target"}}],
+            xaxis: [
+              %{x: 47, stroke_dash_array: 4, border_color: "#775DD0", label: %{text: "x: 47"}},
+              %{x: 70, x2: 90, fill_color: "#FEB019", label: %{text: "window"}}
+            ],
+            points: [%{x: 27, y: 59, marker: %{size: 6}, label: %{text: "Point (27, 59)"}}]
+          }
+        }
+      },
+      %{
         id: "n8",
         title: "Heatmap",
         group: :heatmap,
