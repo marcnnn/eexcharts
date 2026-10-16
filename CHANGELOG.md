@@ -15,6 +15,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   vertical room too. An arity-1 `xaxis.labels.formatter` may now return a list
   of lines, as the arity-2 form already could (the list used to be joined into
   one string).
+- Multi-line radar labels sit on their spoke the way a single line does. The
+  first line used to land on the anchor with the rest hanging below, so side
+  labels looked shifted down and the top label ran into the outer ring. Side
+  labels are now centred on the spoke, the top label grows upward and the
+  bottom label still grows downward.
 - The library now compiles without warnings under Elixir 1.20's type checker.
   Two branches it flagged were already unreachable: the heatmap legend re-tested
   `ranges != []` in a clause the one above it had already narrowed to a non-empty

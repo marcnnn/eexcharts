@@ -290,6 +290,27 @@ defmodule Dev.ChartExamples do
         }
       },
       %{
+        id: "n15",
+        title: "Radar — multi-line labels on every side",
+        group: :radar,
+        type: :radar,
+        series: [%{name: "Score", data: [70, 45, 80, 55, 65, 40]}],
+        categories: [
+          "Identify and Classify",
+          "Protect the Perimeter",
+          "Detect Early Signals",
+          "Respond to Incidents",
+          "Recover Lost Data",
+          "Govern the Program"
+        ],
+        width: 480,
+        height: 380,
+        options: %{
+          xaxis: %{labels: %{formatter: &__MODULE__.split_in_two/1}},
+          yaxis: %{show: false, min: 0}
+        }
+      },
+      %{
         id: "n8",
         title: "Heatmap",
         group: :heatmap,
