@@ -8,7 +8,7 @@ defmodule EexCharts.Renderer do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, Layout, Legend}
+  alias EexCharts.{Charts, Config, LabelText, Layout, Legend}
 
   # Circular / hierarchical types own their full SVG assembly.
   @standalone_types %{
@@ -605,7 +605,7 @@ defmodule EexCharts.Renderer do
             font_size: style.font_size,
             font_weight: style.font_weight
           },
-          esc(Layout.format_y_label(cfg, axis, t, i))
+          LabelText.content(Layout.y_label(cfg, axis, t, i), x + axis.labels.offset_x, :center)
         )
       end)
     else
@@ -718,7 +718,7 @@ defmodule EexCharts.Renderer do
                 font_size: style.font_size,
                 font_weight: style.font_weight
               },
-              label_lines(text, l.grid_x - 8)
+              LabelText.content(text, l.grid_x - 8)
             )
           else
             x_label_text(
@@ -768,25 +768,14 @@ defmodule EexCharts.Renderer do
         font_size: style.font_size,
         font_weight: style.font_weight
       },
-      label_lines(text, x)
+      LabelText.content(text, x)
     )
   end
 
-  # A formatter may return several lines; each extra one becomes a `tspan` a
-  # line-height below its predecessor, anchored at the same x (so it also works
-  # under a rotation transform).
-  defp label_lines(lines, x) when is_list(lines) do
-    lines
-    |> Enum.with_index()
-    |> Enum.map(fn {line, i} ->
-      el("tspan", %{x: x, dy: if(i == 0, do: nil, else: "1.2em")}, esc(to_string(line)))
-    end)
-  end
-
-  defp label_lines(text, _x), do: esc(to_string(text))
-
   # A formatter of arity 2 also receives the label's index (ApexCharts passes
-  # the tick's position), and may return a list of lines.
+  # the tick's position). It may return anything `EexCharts.LabelText` draws:
+  # several lines, each anchored at the same x (so they also work under a
+  # rotation transform), and styled segments within a line.
   defp format_x_label(cfg, c, i) do
     case cfg.xaxis.labels.formatter do
       f when is_function(f, 2) -> f.(c, i)
