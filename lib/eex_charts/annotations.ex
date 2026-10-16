@@ -28,7 +28,15 @@ defmodule EexCharts.Annotations do
   ### x-axis annotations
 
   `%{x:, x2:, ...same styling..., label:}`. `x` alone draws a vertical line,
-  `x` + `x2` a translucent band. x-values are resolved to a category slot:
+  `x` + `x2` a translucent band.
+
+  On a value x-axis (numeric or datetime, see `Layout.value_x?/1`, e.g. a
+  scatter chart) x-values are data values, as in ApexCharts: a number is
+  placed on the x scale, and a datetime axis also accepts `DateTime`,
+  `NaiveDateTime`, `Date` and ISO 8601 strings. Values outside the axis range
+  are skipped.
+
+  On a category axis, x-values are resolved to a category slot:
 
     * when the chart has categories (`cfg.xaxis.categories`), the value is
       matched (as a string) against the category list and its index is used;
@@ -44,7 +52,7 @@ defmodule EexCharts.Annotations do
 
   `%{x:, y:, marker: %{size:, fill_color:, stroke_color:, stroke_width:,
   shape:}, label:}`. Draws a marker (circle or square) at the data position
-  with a label pill above it.
+  with a label pill above it. `x` resolves like an x-axis annotation's.
 
   ## Horizontal bar charts (`layout.horizontal`)
 
@@ -471,8 +479,18 @@ defmodule EexCharts.Annotations do
 
   defp scale_range(l), do: {l.scale.nice_min, l.scale.nice_max}
 
-  # Resolves an x annotation value to a pixel position on the category axis,
-  # or `:skip` when it can't be placed. See moduledoc for the resolution rule.
+  # Resolves an x annotation value to a pixel position on the x-axis, or
+  # `:skip` when it can't be placed. See moduledoc for the resolution rule.
+  defp x_pos(cfg, %Layout{x_scale: xs} = l, x) when is_map(xs) do
+    case axis_value(Layout.x_type(cfg), x) do
+      v when is_number(v) and v >= xs.nice_min and v <= xs.nice_max ->
+        {:ok, Layout.x_value_pos(l, v)}
+
+      _ ->
+        :skip
+    end
+  end
+
   defp x_pos(cfg, l, x) do
     case resolve_index(cfg, x) do
       nil ->
@@ -485,6 +503,24 @@ defmodule EexCharts.Annotations do
           {:ok, Layout.category_pos(l, idx)}
         end
     end
+  end
+
+  # A value x-axis takes data values: numbers, and on a datetime axis anything
+  # `Layout.to_x/2` turns into unix ms. Strings that parse as no date stay
+  # unplaced rather than landing on the epoch.
+  defp axis_value(_type, x) when is_number(x), do: x
+  defp axis_value(:datetime, %{__struct__: _} = x), do: Layout.to_x(x, :datetime)
+
+  defp axis_value(:datetime, x) when is_binary(x) do
+    if valid_date?(x), do: Layout.to_x(x, :datetime)
+  end
+
+  defp axis_value(_type, _x), do: nil
+
+  defp valid_date?(s) do
+    match?({:ok, _, _}, DateTime.from_iso8601(s)) or
+      match?({:ok, _}, NaiveDateTime.from_iso8601(s)) or
+      match?({:ok, _}, Date.from_iso8601(s))
   end
 
   defp resolve_index(cfg, x) do

@@ -181,4 +181,77 @@ defmodule EexCharts.AnnotationsTest do
     assert html =~ ~s(fill="#fff")
     assert html =~ "ok"
   end
+
+  describe "numeric x-axis" do
+    defp scatter(annotations) do
+      render(%{
+        id: "sc",
+        type: :scatter,
+        series: [%{name: "A", data: [[18, 52], [47, 72], [71, 84]]}],
+        options: %{
+          xaxis: %{min: 0, max: 100},
+          yaxis: %{min: 0, max: 100},
+          annotations: annotations
+        }
+      })
+    end
+
+    defp line_x(html) do
+      [_, x] = Regex.run(~r/<line class="eexcharts-annotation-line"[^>]* x1="([-\d.e]+)"/, html)
+      x |> Float.parse() |> elem(0)
+    end
+
+    test "x is a data value, not a category index" do
+      at = fn x -> line_x(scatter(%{xaxis: [%{x: x}]})) end
+
+      assert_in_delta at.(50), (at.(0) + at.(100)) / 2, 0.001
+      assert_in_delta at.(47) - at.(0), (at.(100) - at.(0)) * 0.47, 0.001
+    end
+
+    test "x + x2 draws a band between the two values" do
+      html = scatter(%{xaxis: [%{x: 70, x2: 90, fill_color: "#FEB019"}]})
+
+      assert html =~ "eexcharts-annotation-rect"
+      assert html =~ ~s(fill="#FEB019")
+    end
+
+    test "values outside the axis range are skipped" do
+      refute scatter(%{xaxis: [%{x: 140}]}) =~ "eexcharts-annotation-line"
+      refute scatter(%{xaxis: [%{x: "Jan"}]}) =~ "eexcharts-annotation-line"
+    end
+
+    test "point annotations are placed by value" do
+      html = scatter(%{points: [%{x: 27, y: 59, label: %{text: "Point (27, 59)"}}]})
+
+      assert html =~ "eexcharts-annotation-marker"
+      assert html =~ "Point (27, 59)"
+    end
+  end
+
+  describe "datetime x-axis" do
+    defp timeline(x) do
+      render(%{
+        id: "dt",
+        type: :line,
+        series: [
+          %{
+            name: "A",
+            data: [["2026-01-01", 10], ["2026-01-15", 30], ["2026-02-01", 20]]
+          }
+        ],
+        options: %{xaxis: %{type: :datetime}, annotations: %{xaxis: [%{x: x}]}}
+      })
+    end
+
+    test "accepts ISO 8601 strings, dates and unix ms" do
+      ms = DateTime.to_unix(~U[2026-01-10 00:00:00Z], :millisecond)
+
+      assert line_x(timeline("2026-01-10")) == line_x(timeline(~D[2026-01-10]))
+      assert line_x(timeline("2026-01-10")) == line_x(timeline(ms))
+    end
+
+    test "a string that is no date is skipped rather than placed on the epoch" do
+      refute timeline("soon") =~ "eexcharts-annotation-line"
+    end
+  end
 end

@@ -15,6 +15,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   vertical room too. An arity-1 `xaxis.labels.formatter` may now return a list
   of lines, as the arity-2 form already could (the list used to be joined into
   one string).
+- x-axis and point annotations render on value x-axes (scatter, bubble and
+  numeric or datetime line charts). `x` and `x2` were always resolved as a
+  category index, so `x: 47` on a 0-100 scatter was read as slot 47 and dropped
+  as out of range; only y-axis annotations showed. On a value axis they are now
+  data values, as in ApexCharts, and a datetime axis also takes `DateTime`,
+  `NaiveDateTime`, `Date` and ISO 8601 strings.
 - The library now compiles without warnings under Elixir 1.20's type checker.
   Two branches it flagged were already unreachable: the heatmap legend re-tested
   `ranges != []` in a clause the one above it had already narrowed to a non-empty
