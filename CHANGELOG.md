@@ -6,6 +6,17 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- Styled segments inside one axis label. A label line from
+  `xaxis.labels.formatter` or `yaxis.formatter` may now be a list of segments,
+  where a segment is a string or a map with `:text` and any of `:fill`,
+  `:font_weight`, `:font_size`, `:font_style` and `:font_family`; maps render as
+  nested `tspan`s. The typical use is a short key in an accent colour in front
+  of a long category name. Radar, cartesian x-axis and y-axis labels share one
+  implementation (`EexCharts.LabelText`), so all three measure segments the same
+  way when reserving space, and y-axis formatters may return several lines too.
+
 ### Fixed
 
 - Radar charts size their label reserve from the formatted labels. A formatter
