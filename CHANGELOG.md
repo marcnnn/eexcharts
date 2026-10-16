@@ -8,6 +8,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Radar charts size their label reserve from the formatted labels. A formatter
+  that wraps long categories onto several lines used to free no space, because
+  the reserve was still measured on the raw, unwrapped category; now it uses the
+  longest line drawn, and wrapped labels on the top and bottom spokes get
+  vertical room too. An arity-1 `xaxis.labels.formatter` may now return a list
+  of lines, as the arity-2 form already could (the list used to be joined into
+  one string).
 - The library now compiles without warnings under Elixir 1.20's type checker.
   Two branches it flagged were already unreachable: the heatmap legend re-tested
   `ranges != []` in a clause the one above it had already narrowed to a non-empty

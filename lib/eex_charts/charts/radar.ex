@@ -113,17 +113,33 @@ defmodule EexCharts.Charts.Radar do
     blur = 4
     size = default_size / 2.1 - stroke_w - blur
 
-    # Reserve room for perimeter category labels (ApexCharts xAxisLabelsWidth).
+    # Reserve room for perimeter category labels (ApexCharts xAxisLabelsWidth),
+    # measured on the formatted output: a formatter that wraps a long category
+    # only needs room for its longest line.
     size =
       if cfg.xaxis.labels.show do
-        max_label_w =
+        font_size = cfg.xaxis.labels.style.font_size
+        metrics = Layout.metrics(cfg)
+
+        lines =
           categories
-          |> Enum.map(
-            &Layout.text_width(&1, cfg.xaxis.labels.style.font_size, Layout.metrics(cfg))
-          )
+          |> Enum.with_index()
+          |> Enum.map(fn {c, j} -> label_lines(format_x_label(cfg, c, j)) end)
+
+        max_label_w =
+          lines
+          |> Enum.concat()
+          |> Enum.map(&Layout.text_width(&1, font_size, metrics))
           |> Enum.max(fn -> 0 end)
 
-        size - max_label_w / 1.75
+        size = size - max_label_w / 1.75
+
+        # Wrapped labels on the top and bottom spokes stack vertically, so the
+        # radius also has to leave them room above and below the plot.
+        case extra_vertical_lines(lines, n) do
+          0 -> size
+          extra -> min(size, box_h / 2 - 10 - font_size * (0.6 + 1.2 * extra))
+        end
       else
         size
       end
@@ -332,7 +348,7 @@ defmodule EexCharts.Charts.Radar do
     end)
   end
 
-  defp label_content(text, _x), do: esc(text)
+  defp label_content(text, _x), do: esc(to_string(text))
 
   # `xaxis.labels.offset_y` may be a function of the spoke index, so a single
   # label (e.g. the bottom vertex) can be nudged clear of the plot.
@@ -371,12 +387,26 @@ defmodule EexCharts.Charts.Radar do
     |> Enum.filter(fn {_c, j} -> j < geo.n end)
   end
 
+  # A formatter may return a string or a list of lines, whatever its arity.
   defp format_x_label(cfg, label, j) do
     case cfg.xaxis.labels.formatter do
       f when is_function(f, 2) -> f.(label, j)
-      f when is_function(f, 1) -> to_string(f.(label))
+      f when is_function(f, 1) -> f.(label)
       _ -> label
     end
+  end
+
+  defp label_lines(lines) when is_list(lines), do: Enum.map(lines, &to_string/1)
+  defp label_lines(text), do: [to_string(text)]
+
+  # Lines beyond the first on the spokes pointing straight up (spoke 0) and,
+  # for an even spoke count, straight down.
+  defp extra_vertical_lines(lines, n) do
+    vertical = if rem(n, 2) == 0, do: [0, div(n, 2)], else: [0]
+
+    vertical
+    |> Enum.map(fn j -> length(Enum.at(lines, j, [""])) - 1 end)
+    |> Enum.max()
   end
 
   defp label_color([c | _]) when is_binary(c), do: c

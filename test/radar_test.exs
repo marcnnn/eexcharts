@@ -153,4 +153,74 @@ defmodule EexCharts.RadarTest do
       assert html =~ "&lt;b&gt;"
     end
   end
+
+  describe "wrapped category labels" do
+    @long ~w(Alpha Beta Gamma Delta Epsilon Zeta)
+          |> Enum.map(&"#{&1} Category With A Long Name")
+
+    defp radar_with(formatter) do
+      opts = if formatter, do: %{xaxis: %{labels: %{formatter: formatter}}}, else: %{}
+
+      render(%{
+        id: "rw",
+        type: :radar,
+        series: [%{name: "S1", data: [1, 2, 3, 4, 5, 6]}],
+        categories: @long,
+        width: 560,
+        height: 460,
+        options: opts
+      })
+    end
+
+    # Spoke 0 runs from the top vertex straight down to the centre, so its
+    # length is the plot radius.
+    defp radius(html) do
+      [line] = Regex.run(~r/<line [^>]*>/, html)
+      [_, y1] = Regex.run(~r/ y1="([-\d.]+)"/, line)
+      [_, y2] = Regex.run(~r/ y2="([-\d.]+)"/, line)
+      num(y2) - num(y1)
+    end
+
+    defp num(s), do: s |> Float.parse() |> elem(0)
+
+    defp halves(label) do
+      words = String.split(label)
+      {a, b} = Enum.split(words, div(length(words), 2))
+      [Enum.join(a, " "), Enum.join(b, " ")]
+    end
+
+    test "the label reserve is measured on the longest formatted line" do
+      plain = radar_with(nil)
+      wrapped = radar_with(&halves/1)
+
+      assert radius(wrapped) > radius(plain) + 30
+    end
+
+    test "an arity-1 formatter may return a list of lines" do
+      html = radar_with(&halves/1)
+
+      assert html =~ ~s(>Alpha Category With</tspan>)
+      assert html =~ ~s(>A Long Name</tspan>)
+      refute html =~ "WithA"
+    end
+
+    test "wrapped labels on the top spoke keep the radius inside the box" do
+      html =
+        render(%{
+          id: "rv",
+          type: :radar,
+          series: [%{name: "S1", data: [1, 2, 3, 4]}],
+          categories: ~w(N E S W),
+          width: 600,
+          height: 200,
+          options: %{
+            legend: %{show: false},
+            xaxis: %{labels: %{formatter: fn c -> [c, "line 2", "line 3"] end}}
+          }
+        })
+
+      font_size = 11
+      assert radius(html) <= 100 - 10 - font_size * (0.6 + 1.2 * 2) + 0.001
+    end
+  end
 end
