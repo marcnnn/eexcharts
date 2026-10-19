@@ -19,6 +19,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Styled label segments line up with the text around them in resvg-based
+  renderers (Typst, Inkscape exports). `dominant-baseline` is not inherited in
+  SVG 1.1, and resvg/usvg follow 1.1: a `tspan` that does not set it falls back
+  to the alphabetic baseline, so an orange key in front of a radar label sat
+  above the title like a superscript. Every `tspan` a label draws now repeats
+  its `<text>` element's `dominant-baseline`. Browsers inherit it anyway, so
+  their rendering is unchanged; the SVG goldens gain the attribute.
 - Point annotation labels stay inside the plot. The label was always centered
   above the marker, so a point at the top of the scale pushed it out of the
   chart and one at the left or right edge cut it in half. The default spot is
