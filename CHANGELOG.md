@@ -21,6 +21,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as out of range; only y-axis annotations showed. On a value axis they are now
   data values, as in ApexCharts, and a datetime axis also takes `DateTime`,
   `NaiveDateTime`, `Date` and ISO 8601 strings.
+- Vertical x-axis annotation labels no longer get cropped at the top of the
+  chart. The label was centered one font size below the plot edge and then
+  rotated, so any label longer than about two characters stuck out above the
+  plot by half its length and lost the top of its frame. It now hangs from the
+  plot edge (or sits on the bottom edge with `position: :bottom`), as in
+  ApexCharts.
 - The library now compiles without warnings under Elixir 1.20's type checker.
   Two branches it flagged were already unreachable: the heatmap legend re-tested
   `ranges != []` in a clause the one above it had already narrowed to a non-empty
