@@ -26,6 +26,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   above the title like a superscript. Every `tspan` a label draws now repeats
   its `<text>` element's `dominant-baseline`. Browsers inherit it anyway, so
   their rendering is unchanged; the SVG goldens gain the attribute.
+- `yaxis.title.offset_x` / `offset_y` move the rotated y-axis title on screen.
+  The title was rotated about its un-offset anchor, so `offset_x: 8` slid it 8px
+  along its own (vertical) text instead of 8px to the right, and there was no
+  way to pull a title clear of the left edge, where a font size above about 10
+  clips its ascenders.
 - Point annotation labels stay inside the plot. The label was always centered
   above the marker, so a point at the top of the scale pushed it out of the
   chart and one at the left or right edge cut it in half. The default spot is

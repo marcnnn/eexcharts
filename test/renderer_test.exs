@@ -196,6 +196,31 @@ defmodule EexCharts.RendererTest do
     end
   end
 
+  describe "y-axis title" do
+    # The title is rotated about its own anchor; an offset applied after the
+    # pivot was chosen slid it along the rotated text instead of across.
+    test "offset_x moves the rotated title right on screen" do
+      html =
+        render(%{
+          id: "yt",
+          type: :line,
+          series: [%{name: "A", data: [1, 2]}],
+          categories: ~w(a b),
+          options: %{yaxis: %{title: %{text: "Score", offset_x: 8}}}
+        })
+
+      [_, x, y, px, py] =
+        Regex.run(
+          ~r/class="eexcharts-yaxis-title"[^>]*transform="rotate\(-90 ([\d.]+) ([\d.]+)\)" x="([\d.]+)" y="([\d.]+)"/,
+          html
+        )
+
+      assert {x, y} == {px, py}
+      # font_size 11 - 6 = 5, plus the offset
+      assert {13.0, ""} == Float.parse(x)
+    end
+  end
+
   describe "edge cases" do
     test "empty series renders an empty chart" do
       html = render(%{id: "e1", type: :line, series: []})

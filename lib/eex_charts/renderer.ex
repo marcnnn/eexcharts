@@ -803,16 +803,20 @@ defmodule EexCharts.Renderer do
       style = axis.title.style
       # ApexCharts hugs the left edge a little tighter and centres the rotated
       # title slightly below the plot's midline.
+      # The offsets move the anchor before it is rotated about, so they shift
+      # the title on screen (offset_x right, offset_y down) rather than along
+      # its own, rotated text direction.
       x = if axis.opposite, do: l.w - style.font_size + 6, else: style.font_size - 6
-      y = l.grid_y + l.grid_h / 2 + 4
+      x = x + axis.title.offset_x
+      y = l.grid_y + l.grid_h / 2 + 4 + axis.title.offset_y
       deg = if axis.opposite, do: 90, else: -90
 
       el(
         "text",
         %{
           class: "eexcharts-yaxis-title",
-          x: x + axis.title.offset_x,
-          y: y + axis.title.offset_y,
+          x: x,
+          y: y,
           transform: rotate(deg, x, y),
           text_anchor: "middle",
           fill: style.color || cfg.chart.fore_color,
