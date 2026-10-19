@@ -8,6 +8,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Point annotation labels stay inside the plot. The label was always centered
+  above the marker, so a point at the top of the scale pushed it out of the
+  chart and one at the left or right edge cut it in half. The default spot is
+  kept when it fits; otherwise the label flips below the marker and slides in
+  from the side edge.
 - Radar charts size their label reserve from the formatted labels. A formatter
   that wraps long categories onto several lines used to free no space, because
   the reserve was still measured on the raw, unwrapped category; now it uses the

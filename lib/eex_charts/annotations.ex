@@ -317,12 +317,65 @@ defmodule EexCharts.Annotations do
       {cx, cy} = point_coords(l, px0, anno.y, m)
       label = anno.label
       fs = label.style.font_size
-      ly = cy + label.offset_y - m.size - fs / 1.6
+      above = cy + label.offset_y - m.size - fs / 1.6
+      below = cy + label.offset_y + m.size + fs / 1.6
+      {lx, ly} = fit_point_label(l, label, cx + label.offset_x, above, below)
 
-      [marker(m, cx, cy), label_pill(cfg, cx + label.offset_x, ly, label)]
+      [marker(m, cx, cy), label_pill(cfg, lx, ly, label)]
     else
       _ -> []
     end
+  end
+
+  # Keeps a point label's pill inside the plot. The default spot (centered
+  # above the marker) is kept whenever it fits; a pill that would cross the
+  # top edge flips below the marker, and one that would cross the left or
+  # right edge slides inward. `x` is the text anchor, `above`/`below` are the
+  # candidate text centers.
+  defp fit_point_label(l, label, x, above, below) do
+    if blank?(label.text) do
+      {x, above}
+    else
+      {left, right, up, down} = pill_extent(label, x)
+      top_edge = l.grid_y
+      bottom_edge = l.grid_y + l.grid_h
+
+      y =
+        cond do
+          above - up >= top_edge -> above
+          below + down <= bottom_edge -> below
+          true -> above
+        end
+
+      dx =
+        cond do
+          right - left > l.grid_w -> 0
+          left < l.grid_x -> l.grid_x - left
+          right > l.grid_x + l.grid_w -> l.grid_x + l.grid_w - right
+          true -> 0
+        end
+
+      {x + dx, y}
+    end
+  end
+
+  # Horizontal span and the reach above and below the text center of a label pill anchored at `x`, with the
+  # stroke included. Mirrors the rect geometry in `label_pill/4`.
+  defp pill_extent(label, x) do
+    style = label.style
+    pad = style.padding
+    tw = Layout.text_width(label.text, style.font_size)
+    s = label.border_width / 2
+
+    left =
+      case anchor_str(label.text_anchor) do
+        "end" -> x - tw - pad.left
+        "middle" -> x - tw / 2 - pad.left
+        _ -> x - pad.left
+      end
+
+    right = left + tw + pad.left + pad.right
+    {left - s, right + s, style.font_size / 2 + pad.top + s, style.font_size / 2 + pad.bottom + s}
   end
 
   defp point_coords(l, px0, y, m) do

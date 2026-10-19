@@ -21,7 +21,7 @@ defmodule EexCharts.AnnotationsTest do
   defp tag_attrs(html, marker) do
     [tag] = Regex.run(~r/<[a-z]+ [^>]*#{Regex.escape(marker)}[^>]*>/, html)
 
-    for [_, k, v] <- Regex.scan(~r/([a-z-]+)="(-?[\d.]+)"/, tag), into: %{} do
+    for [_, k, v] <- Regex.scan(~r/([a-z][a-z0-9-]*)="(-?[\d.]+)"/, tag), into: %{} do
       {k, num(v)}
     end
   end
@@ -182,6 +182,61 @@ defmodule EexCharts.AnnotationsTest do
 
       refute html =~ ~s(stroke="#654321")
     end
+
+    test "a point in the top-right corner keeps its label inside the plot" do
+      html =
+        render(base(%{points: [%{x: "Apr", y: 30, label: %{text: "a long record label"}}]}))
+
+      assert_label_in_plot(html)
+      # Flipped below the marker rather than pushed onto it.
+      marker = tag_attrs(html, ~s(class="eexcharts-annotation-marker"))
+      rect = tag_attrs(html, ~s(class="eexcharts-annotation-label-rect"))
+      assert rect["y"] > marker["cy"]
+    end
+
+    test "a point at the left edge keeps its label inside the plot" do
+      html =
+        render(base(%{points: [%{x: "Jan", y: 10, label: %{text: "a long first label"}}]}))
+
+      assert_label_in_plot(html)
+    end
+
+    test "a point with room keeps the default spot centered above the marker" do
+      html = render(base(%{points: [%{x: "Feb", y: 20, label: %{text: "mid"}}]}))
+
+      marker = tag_attrs(html, ~s(class="eexcharts-annotation-marker"))
+      [_, tx, ty] = Regex.run(~r/<text[^>]*x="([\d.]+)" y="([\d.]+)">mid</, html)
+      assert num(tx) == marker["cx"]
+      assert num(ty) < marker["cy"]
+    end
+  end
+
+  # The horizontal grid lines span the plot; the first and last mark its
+  # vertical extent.
+  defp assert_label_in_plot(html) do
+    lines =
+      for [tag] <- Regex.scan(~r/<line class="eexcharts-grid-line"[^>]*>/, html) do
+        tag_attrs(tag, "eexcharts-grid-line")
+      end
+
+    left = hd(lines)["x1"]
+    right = hd(lines)["x2"]
+    top = lines |> Enum.map(& &1["y1"]) |> Enum.min()
+    bottom = lines |> Enum.map(& &1["y1"]) |> Enum.max()
+
+    rect = tag_attrs(html, ~s(class="eexcharts-annotation-label-rect"))
+    s = rect["stroke-width"] / 2
+    eps = 1.0e-6
+
+    assert rect["x"] - s >= left - eps, "label left #{rect["x"] - s} < plot left #{left}"
+
+    assert rect["x"] + rect["width"] + s <= right + eps,
+           "label right #{rect["x"] + rect["width"] + s} > plot right #{right}"
+
+    assert rect["y"] - s >= top - eps, "label top #{rect["y"] - s} < plot top #{top}"
+
+    assert rect["y"] + rect["height"] + s <= bottom + eps,
+           "label bottom #{rect["y"] + rect["height"] + s} > plot bottom #{bottom}"
   end
 
   describe "horizontal bar charts" do
