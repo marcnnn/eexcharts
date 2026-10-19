@@ -605,7 +605,12 @@ defmodule EexCharts.Renderer do
             font_size: style.font_size,
             font_weight: style.font_weight
           },
-          LabelText.content(Layout.y_label(cfg, axis, t, i), x + axis.labels.offset_x, :center)
+          LabelText.content(
+            Layout.y_label(cfg, axis, t, i),
+            x + axis.labels.offset_x,
+            :center,
+            "central"
+          )
         )
       end)
     else
@@ -718,7 +723,7 @@ defmodule EexCharts.Renderer do
                 font_size: style.font_size,
                 font_weight: style.font_weight
               },
-              LabelText.content(text, l.grid_x - 8)
+              LabelText.content(text, l.grid_x - 8, :down, "central")
             )
           else
             x_label_text(

@@ -89,10 +89,17 @@ defmodule EexCharts.LabelText do
     * `:down` (default): the first line is on `y`, the rest below it;
     * `:center`: the block is centred on `y`;
     * `:up`: the last line is on `y`, the rest above it.
-  """
-  def content(label, x, grow \\ :down)
 
-  def content(label, x, grow) when is_list(label) do
+  `baseline` is the `dominant-baseline` of the enclosing `<text>`, if it sets
+  one. It is repeated on every `tspan` drawn here: browsers inherit it, but
+  SVG 1.1 does not make it inherited, and renderers that follow 1.1 (resvg /
+  usvg, and with them Typst) set a `tspan` without it on the alphabetic
+  baseline. A styled segment then sits higher than the text around it, like
+  a superscript.
+  """
+  def content(label, x, grow \\ :down, baseline \\ nil)
+
+  def content(label, x, grow, baseline) when is_list(label) do
     n = length(label)
 
     label
@@ -100,17 +107,19 @@ defmodule EexCharts.LabelText do
     |> Enum.with_index()
     |> Enum.map(fn {segs, i} ->
       dy = if i == 0, do: first_line_dy(n, grow), else: "1.2em"
-      el("tspan", %{x: x, dy: dy}, segments(segs))
+      el("tspan", %{x: x, dy: dy, dominant_baseline: baseline}, segments(segs, baseline))
     end)
   end
 
-  def content(%{} = label, _x, _grow), do: label |> lines() |> hd() |> segments()
-  def content(label, _x, _grow), do: esc(to_string(label))
+  def content(%{} = label, _x, _grow, baseline),
+    do: label |> lines() |> hd() |> segments(baseline)
 
-  defp segments(segs) do
+  def content(label, _x, _grow, _baseline), do: esc(to_string(label))
+
+  defp segments(segs, baseline) do
     Enum.map(segs, fn
       {text, attrs} when attrs == %{} -> esc(text)
-      {text, attrs} -> el("tspan", attrs, esc(text))
+      {text, attrs} -> el("tspan", Map.put(attrs, :dominant_baseline, baseline), esc(text))
     end)
   end
 
