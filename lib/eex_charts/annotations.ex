@@ -268,17 +268,24 @@ defmodule EexCharts.Annotations do
   defp xaxis_label(cfg, l, anno, px) do
     label = anno.label
     fs = label.style.font_size
+    vertical = vertical?(label)
+
+    # A vertical pill is rotated -90 about its center, so its along-text
+    # length becomes its height. Like ApexCharts, which shifts the label down
+    # by its width before rotating, hang it from the plot edge by half that
+    # length; centering it `fs` below the edge pushed long labels past the top.
+    reach = if vertical, do: pill_half_length(label), else: fs
 
     y =
       case label.position do
-        :bottom -> l.grid_y + l.grid_h - fs
+        :bottom -> l.grid_y + l.grid_h - reach
         :center -> l.grid_y + l.grid_h / 2
-        _ -> l.grid_y + fs
+        _ -> l.grid_y + reach
       end
 
     io = label_pill(cfg, px + label.offset_x, y + label.offset_y, label)
 
-    if vertical?(label) do
+    if vertical do
       rotate(io, px + label.offset_x, y + label.offset_y)
     else
       io
@@ -437,6 +444,13 @@ defmodule EexCharts.Annotations do
 
       [rect, txt]
     end
+  end
+
+  # Half the pill's extent along the text, stroke included.
+  defp pill_half_length(label) do
+    pad = label.style.padding
+    tw = if blank?(label.text), do: 0, else: Layout.text_width(label.text, label.style.font_size)
+    (tw + pad.left + pad.right + label.border_width) / 2
   end
 
   defp rotate([], _x, _y), do: []

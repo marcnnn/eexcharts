@@ -17,6 +17,17 @@ defmodule EexCharts.AnnotationsTest do
     }
   end
 
+  # Numeric attributes of the first tag containing `marker`.
+  defp tag_attrs(html, marker) do
+    [tag] = Regex.run(~r/<[a-z]+ [^>]*#{Regex.escape(marker)}[^>]*>/, html)
+
+    for [_, k, v] <- Regex.scan(~r/([a-z-]+)="(-?[\d.]+)"/, tag), into: %{} do
+      {k, num(v)}
+    end
+  end
+
+  defp num(s), do: elem(Float.parse(s), 0)
+
   test "no annotations -> no annotations group" do
     html = render(%{id: "n", type: :line, series: [%{name: "A", data: [1, 2, 3]}]})
     refute html =~ "eexcharts-annotations"
@@ -89,6 +100,39 @@ defmodule EexCharts.AnnotationsTest do
 
       assert html =~ "spring"
       refute html =~ "rotate(-90"
+    end
+
+    test "a rotated label frame stays inside the plot at the top and bottom" do
+      for position <- [:top, :bottom] do
+        html =
+          render(
+            base(%{
+              xaxis: [
+                %{x: "Feb", x2: "Apr", label: %{text: "a rather long window", position: position}}
+              ]
+            })
+          )
+
+        # The band spans the full plot height, so it marks the plot edges.
+        band = tag_attrs(html, ~s(class="eexcharts-annotation-rect"))
+        grid_top = band["y"]
+        grid_bottom = band["y"] + band["height"]
+
+        # Rotating -90 about (cx, cy) maps the rect's x span onto y:
+        # y' = cy - (x - cx). Half the stroke sits outside the rect.
+        [_, cx, cy] = Regex.run(~r/rotate\(-90 ([\d.]+) ([\d.]+)\)/, html)
+        {cx, cy} = {num(cx), num(cy)}
+        rect = tag_attrs(html, ~s(class="eexcharts-annotation-label-rect"))
+        half_stroke = rect["stroke-width"] / 2
+        top = cy - (rect["x"] + rect["width"] - cx) - half_stroke
+        bottom = cy - (rect["x"] - cx) + half_stroke
+
+        assert top >= grid_top - 1.0e-6,
+               "#{position}: frame top #{top} above plot top #{grid_top}"
+
+        assert bottom <= grid_bottom + 1.0e-6,
+               "#{position}: frame bottom #{bottom} below plot bottom #{grid_bottom}"
+      end
     end
 
     test "unknown category is skipped" do
