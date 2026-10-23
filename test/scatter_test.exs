@@ -53,6 +53,44 @@ defmodule EexCharts.ScatterTest do
       assert length(Regex.scan(~r/phx-click="pick"/, html)) == 3
     end
 
+    test "markers.discrete restyles single points only" do
+      html =
+        render(%{
+          id: "sc-discrete",
+          type: :scatter,
+          series: [
+            %{name: "A", data: [[1, 10], [2, 20]]},
+            %{name: "B", data: [[3, 30]]}
+          ],
+          options: %{
+            colors: ["#111111", "#222222"],
+            markers: %{
+              size: 8,
+              stroke_width: 0,
+              discrete: [
+                %{
+                  series_index: 0,
+                  data_point_index: 1,
+                  fill_color: "#ffffff",
+                  stroke_color: "#111111",
+                  stroke_width: 2
+                }
+              ]
+            }
+          }
+        })
+
+      [restyled] = Regex.scan(~r/<circle[^>]*eexcharts-marker-discrete[^>]*>/, html)
+      assert hd(restyled) =~ ~s(fill="#ffffff")
+      assert hd(restyled) =~ ~s(stroke="#111111")
+      assert hd(restyled) =~ ~s(stroke-width="2")
+      assert hd(restyled) =~ ~s(data-j="1")
+
+      # The other two keep the series fill.
+      assert length(Regex.scan(~r/fill="#111111"/, html)) >= 1
+      assert length(Regex.scan(~r/fill="#222222"/, html)) >= 1
+    end
+
     test "markers carry no click attributes without on_click" do
       html =
         render(%{id: "sc-noclick", type: :scatter, series: [%{name: "A", data: [[1, 10]]}]})

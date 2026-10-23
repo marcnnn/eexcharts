@@ -106,6 +106,9 @@ defmodule EexCharts.Config do
         # `:circle`, `:square`, `:triangle` or `:diamond`; a list assigns one
         # shape per series (ApexCharts `markers.shape` array form).
         shape: :circle,
+        # Per-point overrides (ApexCharts `markers.discrete`); see
+        # `EexCharts.Charts.Scatter.render/5`.
+        discrete: [],
         hover: %{size: nil, size_offset: 3}
       },
       data_labels: %{
