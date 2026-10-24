@@ -112,7 +112,7 @@ defmodule EexCharts.Charts.Line do
             cy: y,
             r: r,
             fill: color,
-            stroke: cfg.markers.stroke_colors,
+            stroke: Config.color_for(cfg.markers.stroke_colors, s.index) || color,
             stroke_width: cfg.markers.stroke_width
           })
       end)
@@ -290,7 +290,7 @@ defmodule EexCharts.Charts.Line do
     end)
   end
 
-  defp markers(cfg, points, color, _i) do
+  defp markers(cfg, points, color, i) do
     if cfg.markers.size > 0 do
       Enum.map(points, fn
         {_j, nil, _} ->
@@ -303,9 +303,9 @@ defmodule EexCharts.Charts.Line do
             cx: x,
             cy: y,
             r: cfg.markers.size,
-            fill: cfg.markers.colors || color,
+            fill: Config.color_for(cfg.markers.colors, i) || color,
             fill_opacity: cfg.markers.fill_opacity,
-            stroke: cfg.markers.stroke_colors,
+            stroke: Config.color_for(cfg.markers.stroke_colors, i) || color,
             stroke_width: cfg.markers.stroke_width,
             stroke_opacity: cfg.markers.stroke_opacity
           })

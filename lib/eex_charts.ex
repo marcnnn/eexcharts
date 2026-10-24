@@ -56,6 +56,12 @@ defmodule EexCharts do
   fallback, so charts degrade cleanly on pages without daisyUI. See
   `EexCharts.Theme.apply/2` for the full mapping.
 
+  ## Styles
+
+  `options={%{style: :chartjs}}` (or `config :eexcharts, style: :chartjs`)
+  draws charts with Chart.js' look instead of ApexCharts'. Styles are modules
+  implementing `EexCharts.Style`, so an app can define its own.
+
   ## Static output (PDFs, images)
 
   `to_svg/4` renders a chart as a standalone `<svg>` string with all
