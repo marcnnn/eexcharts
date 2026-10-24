@@ -21,7 +21,9 @@ defmodule EexCharts.Theme do
     palette7: ["#D7263D", "#1B998B", "#2E294E", "#F46036", "#E2C044"],
     palette8: ["#662E9B", "#F86624", "#F9C80E", "#EA3546", "#43BCCD"],
     palette9: ["#5C4742", "#A5978B", "#8D5B4C", "#5A2A27", "#C4BBAF"],
-    palette10: ["#A300D6", "#7D02EB", "#5653FE", "#2983FF", "#00B1F2"]
+    palette10: ["#A300D6", "#7D02EB", "#5653FE", "#2983FF", "#00B1F2"],
+    # Chart.js' `Colors` plugin; what `style: :chartjs` selects.
+    chartjs: ["#36A2EB", "#FF6384", "#FF9F40", "#FFCD56", "#4BC0C0", "#9966FF", "#C9CBCF"]
   }
 
   # ApexCharts' dark theme (`updateThemeOptions`/`checkForDarkTheme`) changes
@@ -74,7 +76,7 @@ defmodule EexCharts.Theme do
   @daisy_border "var(--color-base-300, #e0e0e0)"
   @daisy_border_soft "var(--color-base-300, #e8e8e8)"
 
-  @doc "Returns the named palette (`:palette1`..`:palette10`), or palette1."
+  @doc "Returns the named palette (`:palette1`..`:palette10`, `:chartjs`), or palette1."
   def palette(name), do: Map.get(@palettes, name, @palettes.palette1)
 
   @doc "The daisyUI series palette: one `var(--color-*)` per semantic color."
@@ -99,8 +101,14 @@ defmodule EexCharts.Theme do
     case cfg.theme.mode do
       :dark -> apply_dark(cfg, opts)
       :daisy -> apply_daisy(cfg, opts)
-      _ -> cfg
+      _ -> apply_light(cfg, opts)
     end
+  end
+
+  # Light changes nothing but the palette, and only when one was named:
+  # ApexCharts' `Theme.predefined()` reads `theme.palette` in every mode.
+  defp apply_light(cfg, opts) do
+    if cfg.theme.palette, do: put_colors(cfg, opts), else: cfg
   end
 
   defp apply_dark(cfg, opts) do

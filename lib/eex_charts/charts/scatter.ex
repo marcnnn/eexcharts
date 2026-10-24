@@ -64,7 +64,7 @@ defmodule EexCharts.Charts.Scatter do
                       data_cx: cx,
                       fill: Config.color_for(cfg.markers.colors, s.index) || color,
                       fill_opacity: cfg.fill.opacity,
-                      stroke: Config.color_for(cfg.markers.stroke_colors, s.index),
+                      stroke: Config.color_for(cfg.markers.stroke_colors, s.index) || color,
                       stroke_width: cfg.markers.stroke_width,
                       stroke_opacity: cfg.markers.stroke_opacity
                     },

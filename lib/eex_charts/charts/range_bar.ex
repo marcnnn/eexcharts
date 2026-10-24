@@ -41,7 +41,7 @@ defmodule EexCharts.Charts.RangeBar do
             d: Charts.Bar.bar_path(cfg, r, l.horizontal),
             fill: r.color,
             fill_opacity: cfg.fill.opacity,
-            stroke: stroke_color(cfg, r.series),
+            stroke: stroke_color(cfg, r.series, r.color),
             stroke_width: cfg.stroke.width
           }
 
@@ -173,9 +173,11 @@ defmodule EexCharts.Charts.RangeBar do
 
   defp clamp(l, v), do: v |> max(l.scale.nice_min) |> min(l.scale.nice_max)
 
-  defp stroke_color(cfg, i) do
+  # Unset `stroke.colors` falls back to the series colors (`Theme.js`
+  # `applyColorTypes`). Skipped at width 0, where it would draw nothing.
+  defp stroke_color(cfg, i, fill) do
     case cfg.stroke.colors do
-      nil -> nil
+      nil -> if cfg.stroke.width > 0, do: fill
       colors when is_list(colors) -> Enum.at(colors, rem(i, length(colors)))
       color -> color
     end

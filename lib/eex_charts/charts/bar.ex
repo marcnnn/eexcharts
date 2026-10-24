@@ -34,7 +34,7 @@ defmodule EexCharts.Charts.Bar do
               d: bar_path(cfg, r, l.horizontal),
               fill: r.color,
               fill_opacity: cfg.fill.opacity,
-              stroke: stroke_color(cfg, i),
+              stroke: stroke_color(cfg, i, r.color),
               stroke_width: cfg.stroke.width
             }
 
@@ -240,9 +240,11 @@ defmodule EexCharts.Charts.Bar do
     if cfg.plot_options.bar.distributed, do: Config.color_at(cfg, j), else: color
   end
 
-  defp stroke_color(cfg, i) do
+  # Unset `stroke.colors` falls back to the series colors (`Theme.js`
+  # `applyColorTypes`). Skipped at width 0, where it would draw nothing.
+  defp stroke_color(cfg, i, fill) do
     case cfg.stroke.colors do
-      nil -> nil
+      nil -> if cfg.stroke.width > 0, do: fill
       colors when is_list(colors) -> Enum.at(colors, rem(i, length(colors)))
       color -> color
     end

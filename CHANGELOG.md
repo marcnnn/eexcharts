@@ -36,6 +36,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - SVG invariant lint (`test/svg_invariants_test.exs`) over every catalog
   example in light, dark and live output, a contact sheet for human review
   (`mix run dev/contact_sheet.exs`), and `docs/VALIDATION.md`.
+- Chart styles. `EexCharts.Style` is a behaviour whose `defaults/1` returns
+  option overrides per chart type, layered between ApexCharts' type defaults and
+  the user's options; pick one with `style:` per chart or
+  `config :eexcharts, style: ...`. The built-in `:chartjs` style gives the
+  Chart.js v4 look (`Colors` palette, translucent fills, small ringed points,
+  grid on both axes, 40x12 legend boxes on top). Styles compose with
+  `theme.mode`.
+- `legend.markers.width`, `height` and `fill_opacity`; a stroked legend marker
+  without `stroke_color` is outlined in its series color.
+- `markers.stroke_colors: nil` rings each marker in its series color, and line
+  charts now index per-series `markers.colors`/`stroke_colors` lists.
+- The `:chartjs` palette (`theme: %{palette: :chartjs}`).
 
 - Styled segments inside one axis label. A label line from
   `xaxis.labels.formatter` or `yaxis.formatter` may now be a list of segments,
@@ -71,6 +83,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   along its own (vertical) text instead of 8px to the right, and there was no
   way to pull a title clear of the left edge, where a font size above about 10
   clips its ascenders.
+- A top legend under a title no longer overlaps the plot. It was pushed down by
+  the title's height twice; it now follows ApexCharts' `2 * titleH + margin -
+  20` and never crosses the grid. Legend text also clears a stroked marker's
+  outline.
+- `theme.palette` applies in light mode. It was only honoured under `:dark` and
+  `:daisy`, while ApexCharts reads it in every mode.
+- Bars and range bars with a `stroke.width` but no `stroke.colors` are outlined
+  in their series color, as in ApexCharts, instead of drawing no outline.
 - Point annotation labels stay inside the plot. The label was always centered
   above the marker, so a point at the top of the scale pushed it out of the
   chart and one at the left or right edge cut it in half. The default spot is

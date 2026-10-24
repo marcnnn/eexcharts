@@ -34,6 +34,8 @@ bindings, so selections arrive as ordinary LiveView events.
 - **Theming:** light and dark (`theme: %{mode: :dark}`), custom palettes, and
   [daisyUI](https://daisyui.com) (`theme: %{mode: :daisy}`) — charts follow the
   active daisyUI theme, including live theme switches, with no JS
+- **Styles:** the default ApexCharts look or a Chart.js look
+  (`style: :chartjs`), and custom styles via the `EexCharts.Style` behaviour
 - **ApexCharts fidelity:** same default palette, per-type defaults, nice-scale
   axis algorithm, `column_width`/`bar_height` percentages, border radius
   (`:end` / `:around`), gradient area fills, donut center/total labels,
@@ -150,6 +152,43 @@ still look right on a page without daisyUI.
 
 Set `theme: %{mode: :daisy, palette: :palette6}` to keep daisyUI chrome while
 pinning the series to an ApexCharts palette.
+
+### Styles: the Chart.js look
+
+The theme decides colors; a *style* decides how marks are drawn. Besides the
+default ApexCharts style there is a built-in Chart.js style:
+
+```elixir
+# config/config.exs
+config :eexcharts, style: :chartjs
+```
+
+Or per chart: `options={%{style: :chartjs}}`.
+
+It takes Chart.js v4's defaults and its `Colors` plugin: translucent fills under
+solid series-colored borders, radius-3 points, 3px straight lines, flat area
+fills, grey grid lines on both axes, `#666` 12px text, 40x12 legend boxes above
+the chart, and no data labels. Layout stays ApexCharts' (nice scale, gutters,
+legend wrapping), so this is a look, not a Chart.js API. Chart types Chart.js
+doesn't have (heatmap, treemap, candlestick…) get the palette and chrome only.
+
+Your own options still win, and styles compose with themes:
+`%{style: :chartjs, theme: %{mode: :daisy}}` draws Chart.js marks in daisyUI
+chrome. Chart.js bars have no border by default; `stroke: %{width: 1}` adds the
+series-colored outline seen in most Chart.js examples.
+
+A custom style is a module implementing `EexCharts.Style`: one `defaults/1`
+callback that returns option overrides for a chart type.
+
+```elixir
+defmodule MyApp.ChartStyle do
+  @behaviour EexCharts.Style
+
+  @impl true
+  def defaults(:bar), do: %{plot_options: %{bar: %{border_radius: 6}}}
+  def defaults(_type), do: %{grid: %{stroke_dash_array: 4}}
+end
+```
 
 ### Interactions from LiveView
 

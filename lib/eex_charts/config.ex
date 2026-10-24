@@ -5,7 +5,9 @@ defmodule EexCharts.Config do
   maps with snake_case atom keys.
 
   `build/2` merges (in order): base defaults, per-chart-type overrides, and
-  user options — the same layering ApexCharts applies.
+  user options — the same layering ApexCharts applies. A `style` other than
+  the default (see `EexCharts.Style`) slots its overrides in just before the
+  user options.
   """
 
   @palette ["#008FFB", "#00E396", "#FEB019", "#FF4560", "#775DD0"]
@@ -30,10 +32,14 @@ defmodule EexCharts.Config do
   `:pie`, `:donut`) by deep-merging user options over the defaults.
   """
   def build(type, opts \\ %{}) when is_map(opts) do
+    style = opts[:style] || EexCharts.Style.default()
+
     defaults()
     |> deep_merge(type_defaults(type))
+    |> deep_merge(EexCharts.Style.defaults(style, type))
     |> deep_merge(EexCharts.Charts.BarFamily.option_defaults(type, opts))
     |> deep_merge(opts)
+    |> Map.put(:style, style)
     |> Map.update!(:chart, &Map.put(&1, :type, type))
     |> EexCharts.Theme.apply(opts)
   end
@@ -103,6 +109,7 @@ defmodule EexCharts.Config do
       markers: %{
         size: 0,
         colors: nil,
+        # A color, a per-series list, or `nil` for each series' own color.
         stroke_colors: "#fff",
         stroke_width: 2,
         stroke_opacity: 0.9,
@@ -271,9 +278,14 @@ defmodule EexCharts.Config do
         # them from font metrics. Opting in hands the same job to the same
         # engine and the two agree exactly.
         html: false,
+        # `width`/`height` stretch a `:square` marker into a box (`nil` keeps
+        # it `2 * size` square); a `nil` `stroke_color` is the series color.
         markers: %{
           size: 6,
           shape: :circle,
+          width: nil,
+          height: nil,
+          fill_opacity: 1,
           stroke_width: 0,
           stroke_color: nil,
           radius: nil,

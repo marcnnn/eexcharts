@@ -18,6 +18,50 @@ defmodule EexCharts.Legend do
   # by radius, so the drawn box is twice `legend.markers.size`.
   defp marker_d(cfg), do: (cfg.legend.markers.size || 6) * 2
 
+  # `legend.markers.width`/`height` stretch the box (Chart.js' 40x12 legend
+  # swatches); a round shape inside a stretched box keeps the smaller side.
+  defp marker_w(cfg), do: cfg.legend.markers.width || marker_d(cfg)
+  defp marker_h(cfg), do: cfg.legend.markers.height || marker_d(cfg)
+
+  # The gap between marker and text, widened by the half of a marker outline
+  # that is drawn outside the marker box.
+  defp text_gap(cfg) do
+    w = cfg.legend.markers.stroke_width
+    if w && w > 0, do: @marker_gap + w / 2, else: @marker_gap
+  end
+
+  # ApexCharts drops a top legend below the title by the title's height twice
+  # plus its margin, less 20 (`legendAlignHorizontal` adds `titleH + margin -
+  # 10`, `setLegendWrapXY` another `titleH - 10`), where `titleH` is the
+  # title's bounding box plus 5. The plot below only moves by `title_h`, so
+  # with a large title the legend is kept off the grid.
+  defp top_y(legend, cfg, l) do
+    base = l.grid_y - l.title_h - legend.h - 8
+
+    shift =
+      if l.title_h > 0 do
+        title_box = cfg.title.style.font_size * 8 / 7 + 5
+        max(2 * title_box + cfg.title.margin - 20, 0)
+      else
+        0
+      end
+
+    (base + shift) |> min(l.grid_y - legend.h) |> max(l.title_h + 4)
+  end
+
+  # A stroke width with no stroke color outlines the marker in its own color.
+  defp marker_paint(cfg, color) do
+    m = cfg.legend.markers
+    stroke = if m.stroke_width && m.stroke_width > 0, do: m.stroke_color || color
+
+    %{
+      fill: color,
+      fill_opacity: if(m.fill_opacity != 1, do: m.fill_opacity),
+      stroke: stroke,
+      stroke_width: if(stroke, do: m.stroke_width)
+    }
+  end
+
   @doc """
   The legend entries: `legend.custom_legend_items` when set, otherwise the
   series names.
@@ -47,8 +91,8 @@ defmodule EexCharts.Legend do
     if show do
       font = cfg.legend.font_size
       im = cfg.legend.item_margin
-      marker_d = marker_d(cfg)
-      row_h = max(font, marker_d) + 2 * im.vertical
+      marker_w = marker_w(cfg)
+      row_h = max(font, marker_h(cfg)) + 2 * im.vertical
 
       html? = cfg.legend.html
 
@@ -59,7 +103,7 @@ defmodule EexCharts.Legend do
 
           # The HTML legend's item is `marker box + 1px gap + text`; the SVG
           # one uses its own marker gap.
-          lead = if html?, do: marker_d + 2 + 1, else: marker_d + @marker_gap
+          lead = if html?, do: marker_w + 2 + 1, else: marker_w + text_gap(cfg)
 
           %{text: text, index: i, w: lead + text_w + 2 * im.horizontal}
         end)
@@ -120,14 +164,15 @@ defmodule EexCharts.Legend do
     on_click = opts[:on_click]
     font = cfg.legend.font_size
     im = cfg.legend.item_margin
-    marker_d = marker_d(cfg)
-    row_h = max(font, marker_d) + 2 * im.vertical
+    marker_w = marker_w(cfg)
+    marker_h = marker_h(cfg)
+    row_h = max(font, marker_h) + 2 * im.vertical
     fore = cfg.legend.labels.colors || cfg.chart.fore_color
 
     {x0, y0} =
       case legend.position do
         :bottom -> {0, l.h - legend.h + 4}
-        :top -> {0, (l.grid_y - legend.h - 8 + l.title_h) |> max(l.title_h + 4)}
+        :top -> {0, top_y(legend, cfg, l)}
         :right -> {l.w - legend.w, l.grid_y + max((l.grid_h - legend.h) / 2, 0)}
       end
 
@@ -162,40 +207,31 @@ defmodule EexCharts.Legend do
                 do: Config.color_at(cfg, item.index),
                 else: fore
 
-            marker_color = marker_color(cfg, item.index)
-
-            stroke_w = cfg.legend.markers.stroke_width
-            stroke_c = if stroke_w && stroke_w > 0, do: cfg.legend.markers.stroke_color
-
+            paint = marker_paint(cfg, marker_color(cfg, item.index))
             shape = EexCharts.Marker.shape_for(cfg.legend.markers.shape, item.index)
 
             marker =
               case shape do
                 :square ->
-                  el("rect", %{
-                    class: "eexcharts-legend-marker",
-                    x: x + im.horizontal,
-                    y: y - marker_d / 2,
-                    width: marker_d,
-                    height: marker_d,
-                    rx: cfg.legend.markers.radius || 2,
-                    fill: marker_color,
-                    stroke: stroke_c,
-                    stroke_width: if(stroke_c, do: stroke_w)
-                  })
+                  el(
+                    "rect",
+                    Map.merge(paint, %{
+                      class: "eexcharts-legend-marker",
+                      x: x + im.horizontal,
+                      y: y - marker_h / 2,
+                      width: marker_w,
+                      height: marker_h,
+                      rx: cfg.legend.markers.radius || 2
+                    })
+                  )
 
                 other ->
                   EexCharts.Marker.render(
                     other,
-                    x + im.horizontal + marker_d / 2,
+                    x + im.horizontal + marker_w / 2,
                     y,
-                    marker_d / 2,
-                    %{
-                      class: "eexcharts-legend-marker",
-                      fill: marker_color,
-                      stroke: stroke_c,
-                      stroke_width: if(stroke_c, do: stroke_w)
-                    }
+                    min(marker_w, marker_h) / 2,
+                    Map.put(paint, :class, "eexcharts-legend-marker")
                   )
               end
 
@@ -204,7 +240,7 @@ defmodule EexCharts.Legend do
                 "text",
                 %{
                   class: "eexcharts-legend-text",
-                  x: x + im.horizontal + marker_d + @marker_gap,
+                  x: x + im.horizontal + marker_w + text_gap(cfg),
                   y: y,
                   fill: color,
                   font_family: cfg.legend.font_family,
@@ -259,15 +295,15 @@ defmodule EexCharts.Legend do
     font = cfg.legend.font_size
     fore = cfg.legend.labels.colors || cfg.chart.fore_color
 
-    marker_box = html_marker_box(cfg)
-    item_h = max(ceil(font * 4 / 3), marker_box)
+    {_, box_h} = marker_box = html_marker_box(cfg)
+    item_h = max(ceil(font * 4 / 3), box_h)
     row_h = item_h + 2 * im.vertical
     box_w = if legend.position == :right, do: legend.w, else: cfg.legend.width || l.w
 
     {x0, y0} =
       case legend.position do
         :bottom -> {0, l.h - legend.h + 4}
-        :top -> {0, (l.grid_y - legend.h - 8 + l.title_h) |> max(l.title_h + 4)}
+        :top -> {0, top_y(legend, cfg, l)}
         :right -> {l.w - legend.w, l.grid_y + max((l.grid_h - legend.h) / 2, 0)}
       end
 
@@ -312,39 +348,33 @@ defmodule EexCharts.Legend do
   end
 
   # ApexCharts pads its marker box one pixel around the drawn shape.
-  defp html_marker_box(cfg), do: marker_d(cfg) + 2
+  defp html_marker_box(cfg), do: {marker_w(cfg) + 2, marker_h(cfg) + 2}
 
-  defp html_item(item, cfg, fore, marker_box, im, font, hidden, on_click) do
+  defp html_item(item, cfg, fore, {box_w, box_h}, im, font, hidden, on_click) do
     color =
       if cfg.legend.labels.use_series_colors, do: Config.color_at(cfg, item.index), else: fore
 
-    marker_color = marker_color(cfg, item.index)
-    stroke_w = cfg.legend.markers.stroke_width
-    stroke_c = if stroke_w && stroke_w > 0, do: cfg.legend.markers.stroke_color
+    paint = marker_paint(cfg, marker_color(cfg, item.index))
     hidden? = MapSet.member?(hidden, item.index)
-    r = marker_d(cfg) / 2
+    {w, h} = {marker_w(cfg), marker_h(cfg)}
     shape = EexCharts.Marker.shape_for(cfg.legend.markers.shape, item.index)
 
     marker_shape =
       case shape do
         :square ->
-          el("rect", %{
-            x: marker_box / 2 - r,
-            y: marker_box / 2 - r,
-            width: r * 2,
-            height: r * 2,
-            rx: cfg.legend.markers.radius || 2,
-            fill: marker_color,
-            stroke: stroke_c,
-            stroke_width: if(stroke_c, do: stroke_w)
-          })
+          el(
+            "rect",
+            Map.merge(paint, %{
+              x: (box_w - w) / 2,
+              y: (box_h - h) / 2,
+              width: w,
+              height: h,
+              rx: cfg.legend.markers.radius || 2
+            })
+          )
 
         other ->
-          EexCharts.Marker.render(other, marker_box / 2, marker_box / 2, r, %{
-            fill: marker_color,
-            stroke: stroke_c,
-            stroke_width: if(stroke_c, do: stroke_w)
-          })
+          EexCharts.Marker.render(other, box_w / 2, box_h / 2, min(w, h) / 2, paint)
       end
 
     marker =
@@ -353,12 +383,12 @@ defmodule EexCharts.Legend do
         %{
           class: "eexcharts-legend-marker",
           style:
-            "display:flex;position:relative;width:#{fmt(marker_box)}px;height:#{fmt(marker_box)}px;" <>
+            "display:flex;position:relative;width:#{fmt(box_w)}px;height:#{fmt(box_h)}px;" <>
               "margin:0 1px 0 0;flex:0 0 auto;"
         },
         el(
           "svg",
-          %{width: marker_box, height: marker_box, xmlns: "http://www.w3.org/2000/svg"},
+          %{width: box_w, height: box_h, xmlns: "http://www.w3.org/2000/svg"},
           marker_shape
         )
       )
