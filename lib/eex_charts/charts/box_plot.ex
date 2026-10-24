@@ -13,11 +13,30 @@ defmodule EexCharts.Charts.BoxPlot do
   half (`median`..`q3`) uses `colors.upper`. A median line runs across the box;
   whiskers extend `min`..`q1` and `q3`..`max` as vertical lines with
   horizontal end caps. All outlines use `stroke` (`#24292e` default).
+
+  ## Raw observations
+
+  A point can also carry the raw observations and let the chart compute the
+  summary (`EexCharts.Stats.summary/2`: type-7 quartiles, Tukey whiskers):
+
+      %{x: "A", observations: [12, 15, 9, 31, ...]}   # always raw
+      %{x: "A", y: [12, 15, 9, 31, 14, 18]}           # raw: not exactly 5 values
+
+  `observations:` is the unambiguous form. A `y:` list is read as raw
+  observations whenever it does not hold exactly five numbers; exactly five
+  numbers stay a precomputed `[min, q1, median, q3, max]`, so a sample of
+  exactly five observations must use `observations:`. Bare lists keep their
+  precomputed meaning.
+
+  For raw points the whiskers end at the most extreme observations within
+  `plot_options.box_plot.whisker` (default `1.5`) times the IQR of the box;
+  observations beyond are outliers, drawn as hollow circles (radius 3) in the
+  stroke color and listed in the tooltip.
   """
 
   import EexCharts.SVG
 
-  alias EexCharts.Layout
+  alias EexCharts.{Layout, Stats}
 
   @doc "Renders box plot series into the cartesian grid."
   def render(cfg, series, %Layout{} = l, opts \\ []) do
@@ -41,7 +60,7 @@ defmodule EexCharts.Charts.BoxPlot do
         s.data
         |> Enum.with_index()
         |> Enum.flat_map(fn {p, j} ->
-          case five(p) do
+          case five(p, cfg) do
             [mn, q1, med, q3, mx] ->
               group_x = origin + slot * j + (slot - bar_w * n_series) / 2
               x = group_x + bar_w * pos_i
@@ -102,6 +121,20 @@ defmodule EexCharts.Charts.BoxPlot do
               upper_cap =
                 el("line", Map.merge(base, %{x1: cap_l, x2: cap_r, y1: y_mx, y2: y_mx}))
 
+              outliers =
+                Enum.map(outliers(p, cfg), fn v ->
+                  el("circle", %{
+                    class: "eexcharts-boxplot-outlier",
+                    data_j: j,
+                    cx: cx,
+                    cy: Layout.y_for(l, clamp(l, v)),
+                    r: 3,
+                    fill: "none",
+                    stroke: stroke,
+                    stroke_width: max(stroke_w, 1)
+                  })
+                end)
+
               [
                 lower_whisker,
                 lower_cap,
@@ -109,7 +142,8 @@ defmodule EexCharts.Charts.BoxPlot do
                 upper_cap,
                 lower_box,
                 upper_box,
-                median_line
+                median_line,
+                outliers
               ]
 
             nil ->
@@ -121,12 +155,12 @@ defmodule EexCharts.Charts.BoxPlot do
     end)
   end
 
-  @doc "Returns `{y_min, y_max}` across all five-number summaries."
+  @doc "Returns `{y_min, y_max}` across all five-number summaries and outliers."
   def data_range(series) do
     values =
       series
       |> Enum.flat_map(& &1.data)
-      |> Enum.flat_map(fn p -> five(p) || [] end)
+      |> Enum.flat_map(fn p -> (five(p, nil) || []) ++ outliers(p, nil) end)
       |> Enum.filter(&is_number/1)
 
     case values do
@@ -137,19 +171,53 @@ defmodule EexCharts.Charts.BoxPlot do
 
   @doc "Formats one box data point for the tooltip."
   def tooltip_value(cfg, v) do
-    case five(v) do
+    case five(v, cfg) do
       [mn, q1, med, q3, mx] ->
+        out =
+          case outliers(v, cfg) do
+            [] -> ""
+            vs -> " Outliers: " <> Enum.map_join(vs, ", ", &fmt_num(cfg, &1))
+          end
+
         "Min: #{fmt_num(cfg, mn)} Q1: #{fmt_num(cfg, q1)} Median: #{fmt_num(cfg, med)} " <>
-          "Q3: #{fmt_num(cfg, q3)} Max: #{fmt_num(cfg, mx)}"
+          "Q3: #{fmt_num(cfg, q3)} Max: #{fmt_num(cfg, mx)}" <> out
 
       nil ->
         ""
     end
   end
 
-  defp five(%{y: [mn, q1, med, q3, mx | _]}), do: [mn, q1, med, q3, mx]
-  defp five([mn, q1, med, q3, mx | _]), do: [mn, q1, med, q3, mx]
-  defp five(_), do: nil
+  defp five(p, cfg) do
+    case raw_summary(p, cfg) do
+      :not_raw -> precomputed(p)
+      nil -> nil
+      s -> [s.lower, s.q1, s.median, s.q3, s.upper]
+    end
+  end
+
+  defp precomputed(%{y: [mn, q1, med, q3, mx]}), do: [mn, q1, med, q3, mx]
+  defp precomputed([mn, q1, med, q3, mx | _]), do: [mn, q1, med, q3, mx]
+  defp precomputed(_), do: nil
+
+  defp outliers(p, cfg) do
+    case raw_summary(p, cfg) do
+      %{outliers: outliers} -> outliers
+      _ -> []
+    end
+  end
+
+  # `:not_raw` for precomputed points; `nil` for raw points without numbers.
+  defp raw_summary(%{observations: obs}, cfg) when is_list(obs), do: summarize(obs, cfg)
+  defp raw_summary(%{y: [_, _, _, _, _]}, _cfg), do: :not_raw
+  defp raw_summary(%{y: obs}, cfg) when is_list(obs), do: summarize(obs, cfg)
+  defp raw_summary(_p, _cfg), do: :not_raw
+
+  # `data_range/1` has no config and passes `nil`: whiskers plus outliers
+  # always span every observation, so the fence multiple cannot move the range.
+  defp summarize(obs, cfg) do
+    whisker = if cfg, do: Map.get(cfg.plot_options.box_plot, :whisker, 1.5), else: 1.5
+    Stats.summary(obs, whisker: whisker)
+  end
 
   defp clamp(l, v), do: v |> max(l.scale.nice_min) |> min(l.scale.nice_max)
 
