@@ -102,7 +102,18 @@ defmodule EexCharts do
       :treemap,
       :candlestick,
       :box_plot,
-      :range_bar
+      :range_bar,
+      :histogram,
+      :violin,
+      :sunburst,
+      :funnel,
+      :pyramid,
+      :waterfall,
+      :dumbbell,
+      :streamgraph,
+      :gauge,
+      :unit,
+      :waffle
     ],
     doc: "chart type"
   )
