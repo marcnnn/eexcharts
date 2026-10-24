@@ -166,6 +166,13 @@ defmodule EexCharts.Charts.RadialBar do
     end
   end
 
+  # Targets default to the fore colour, which in the dark theme is near-white
+  # and would vanish on ApexCharts' light #f2f2f2 track.
+  defp default_target_color(cfg, i) do
+    track = track_background(cfg.plot_options.radial_bar.track.background, i)
+    EexCharts.Color.legible(cfg.chart.fore_color, track || "#f2f2f2")
+  end
+
   defp track_background(bg, i) when is_list(bg), do: Enum.at(bg, rem(i, length(bg)))
   defp track_background(bg, _i), do: bg
 
@@ -233,7 +240,7 @@ defmodule EexCharts.Charts.RadialBar do
           y1: y1,
           x2: x2,
           y2: y2,
-          stroke: t[:color] || style.color || cfg.chart.fore_color,
+          stroke: t[:color] || style.color || default_target_color(cfg, r.index),
           stroke_width: t[:width] || style.width,
           stroke_linecap: "round"
         })
@@ -389,7 +396,8 @@ defmodule EexCharts.Charts.RadialBar do
             ),
             Enum.map(r.targets, fn t ->
               Renderer.tooltip_row(
-                t[:color] || cfg.plot_options.radial_bar.target.color || cfg.chart.fore_color,
+                t[:color] || cfg.plot_options.radial_bar.target.color ||
+                  default_target_color(cfg, r.index),
                 "Target",
                 "#{fmt_value(t.value)}%"
               )

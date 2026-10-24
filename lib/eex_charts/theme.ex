@@ -108,6 +108,18 @@ defmodule EexCharts.Theme do
     |> put_colors(opts)
     |> put_fore_color(opts)
     |> put_tooltip_theme(opts)
+    |> put_gauge_track(opts)
+  end
+
+  # ApexCharts' light #f2f2f2 track glares on a dark chart. The gauge is not
+  # an ApexCharts v4 type, so it gets a muted dark track instead, unless the
+  # user chose one.
+  defp put_gauge_track(cfg, opts) do
+    if get_in(opts, [:plot_options, :gauge, :track, :background]) do
+      cfg
+    else
+      put_in(cfg, [:plot_options, :gauge, :track, :background], "#4b4f52")
+    end
   end
 
   # palette4 for dark; only when the user did not pass explicit colors.
