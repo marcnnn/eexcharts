@@ -13,6 +13,7 @@ defmodule EexCharts.Renderer do
   # Circular / hierarchical types own their full SVG assembly.
   @standalone_types %{
     radial_bar: Charts.RadialBar,
+    gauge: Charts.Gauge,
     radar: Charts.Radar,
     heatmap: Charts.Heatmap,
     treemap: Charts.Treemap,
