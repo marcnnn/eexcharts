@@ -8,7 +8,7 @@ defmodule EexCharts.Renderer do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, LabelText, Layout, Legend}
+  alias EexCharts.{Charts, Config, LabelText, Layout, Legend, Stacking}
 
   # Circular / hierarchical types own their full SVG assembly.
   @standalone_types %{
@@ -106,6 +106,7 @@ defmodule EexCharts.Renderer do
   # ── Cartesian (line / area / bar) ────────────────────────────────────────
 
   defp render_cartesian(cfg, params, id) do
+    cfg = Stacking.prepare(cfg)
     all_series = normalize_series(params[:series])
     hidden = hidden_set(params)
     series = Enum.reject(all_series, &MapSet.member?(hidden, &1.index))
@@ -113,8 +114,10 @@ defmodule EexCharts.Renderer do
     names = Enum.map(all_series, & &1.name)
     n = series |> Enum.map(&length(&1.data)) |> Enum.max(fn -> 0 end)
     n = max(n, length(cfg.xaxis.categories))
+    series = Stacking.annotate(cfg, series, n)
 
-    {y_min, y_max} = data_range(cfg, series)
+    {y_min, y_max} =
+      if Stacking.enabled?(cfg), do: Stacking.data_range(series), else: data_range(cfg, series)
 
     y_axes = Config.yaxes(cfg)
 
@@ -156,7 +159,7 @@ defmodule EexCharts.Renderer do
       end
 
     hover_markers =
-      if cfg.chart.type in [:line, :area] and !params[:static],
+      if cfg.chart.type in [:line, :area, :streamgraph] and !params[:static],
         do: Charts.Line.hover_markers(cfg, series, l),
         else: []
 
@@ -893,6 +896,10 @@ defmodule EexCharts.Renderer do
         s.data
         |> Enum.with_index()
         |> point_label_positions(cfg, l, dl)
+        |> Enum.map(fn
+          {v, j, x, _y} when is_map_key(s, :stack) -> {v, j, x, Stacking.label_y(s, l, j, v, dl)}
+          point -> point
+        end)
         |> Enum.map(fn {v, j, x, y} ->
           text = format_data_label(cfg, v, i, j)
 
@@ -1110,7 +1117,11 @@ defmodule EexCharts.Renderer do
               if v == nil do
                 []
               else
-                tooltip_row(Config.color_at(cfg, s.index), s.name, tooltip_value(cfg, v))
+                tooltip_row(
+                  Config.color_at(cfg, s.index),
+                  s.name,
+                  Stacking.tooltip_value(s, j, tooltip_value(cfg, v))
+                )
               end
             end)
 

@@ -74,6 +74,9 @@ defmodule EexCharts.Config do
         fore_color: "#373d3f",
         background: "",
         stacked: false,
+        # `"normal"` or `"100%"` (ApexCharts `chart.stackType`); see
+        # EexCharts.Stacking for line/area stacking.
+        stack_type: "normal",
         offset_x: 0,
         offset_y: 0
       },
@@ -591,6 +594,22 @@ defmodule EexCharts.Config do
       fill: %{opacity: 0.7},
       tooltip: %{theme: :dark},
       legend: %{position: :right}
+    }
+  end
+
+  # Streamgraph: smooth stacked areas around a moving baseline (see
+  # EexCharts.Stacking). The baseline makes the y-axis meaningless, so it and
+  # the horizontal grid lines are off by default.
+  defp type_defaults(:streamgraph) do
+    %{
+      chart: %{stacked: true},
+      plot_options: %{streamgraph: %{offset: :wiggle, order: :none}},
+      data_labels: %{enabled: false},
+      stroke: %{width: 1, curve: :smooth, colors: ["#fff"]},
+      fill: %{type: :solid, opacity: 0.9},
+      markers: %{size: 0, hover: %{size_offset: 6}},
+      yaxis: %{show: false},
+      grid: %{yaxis_lines: false}
     }
   end
 
