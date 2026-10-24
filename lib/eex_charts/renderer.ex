@@ -32,6 +32,8 @@ defmodule EexCharts.Renderer do
   `:labels`, `:width`, `:height`, `:options`, `:on_click`, `:push_hover`,
   `:on_legend_click`, `:hidden_series`, `:class`.
   """
+  def render(%{options: %{trellis: %{}}} = params), do: EexCharts.Trellis.render(params)
+
   def render(params) do
     type = params[:type] || :line
     id = params[:id] || "eexcharts"
@@ -74,7 +76,8 @@ defmodule EexCharts.Renderer do
     Map.drop(params, [:on_click, :push_hover, :on_legend_click])
   end
 
-  defp staticize_cfg(cfg) do
+  @doc false
+  def staticize_cfg(cfg) do
     cfg
     |> put_in([:tooltip, :enabled], false)
     |> resolve_cfg_vars()
@@ -651,10 +654,13 @@ defmodule EexCharts.Renderer do
     end
   end
 
+  # Horizontal bars swap the axes the way `Layout` sizes them: the bottom band
+  # (value labels) belongs to `xaxis.labels`, the left gutter (category
+  # labels) to `yaxis.labels`.
   defp horizontal_value_labels(cfg, l) do
     axis = hd(l.y_axes)
 
-    if axis.show and axis.labels.show do
+    if axis.show and cfg.xaxis.labels.show do
       style = axis.labels.style
       color = axis_label_color(style.colors, cfg.chart.fore_color)
 
@@ -718,7 +724,7 @@ defmodule EexCharts.Renderer do
 
   # Category labels: bottom for vertical charts, left for horizontal bars.
   defp category_axis_labels(cfg, l, categories) do
-    if cfg.xaxis.labels.show do
+    if if(l.horizontal, do: hd(l.y_axes).labels.show, else: cfg.xaxis.labels.show) do
       style = cfg.xaxis.labels.style
       color = axis_label_color(style.colors, cfg.chart.fore_color)
       tick_h = if cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
