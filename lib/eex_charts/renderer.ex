@@ -113,7 +113,7 @@ defmodule EexCharts.Renderer do
 
   defp render_cartesian(cfg, params, id) do
     cfg = Stacking.prepare(cfg)
-    all_series = normalize_series(params[:series])
+    {cfg, all_series} = prepare_series(cfg, normalize_series(params[:series]))
     hidden = hidden_set(params)
     series = Enum.reject(all_series, &MapSet.member?(hidden, &1.index))
 
@@ -140,7 +140,10 @@ defmodule EexCharts.Renderer do
 
     l = Layout.build(cfg, names, n, y_ranges, x_range)
 
-    categories = categories(cfg, n)
+    categories =
+      if cfg.chart.type == :histogram,
+        do: Charts.Histogram.bin_labels(all_series),
+        else: categories(cfg, n)
 
     bar? = cfg.chart.type == :bar
 
@@ -155,6 +158,12 @@ defmodule EexCharts.Renderer do
 
         :box_plot ->
           Charts.BoxPlot.render(cfg, series, l, on_click: params[:on_click])
+
+        :histogram ->
+          Charts.Histogram.render(cfg, series, l, on_click: params[:on_click])
+
+        :violin ->
+          Charts.Violin.render(cfg, series, l, on_click: params[:on_click])
 
         :range_bar ->
           Charts.RangeBar.render(cfg, series, l, on_click: params[:on_click])
@@ -227,10 +236,19 @@ defmodule EexCharts.Renderer do
     end
   end
 
+  # Statistical types turn raw observations into drawable points first.
+  defp prepare_series(%{chart: %{type: :histogram}} = cfg, s),
+    do: Charts.Histogram.prepare(cfg, s)
+
+  defp prepare_series(%{chart: %{type: :violin}} = cfg, s), do: Charts.Violin.prepare(cfg, s)
+  defp prepare_series(cfg, series), do: {cfg, series}
+
   defp data_range(cfg, series) do
     case cfg.chart.type do
       :candlestick -> Charts.Candlestick.data_range(series)
       :box_plot -> Charts.BoxPlot.data_range(series)
+      :histogram -> Charts.Histogram.data_range(series)
+      :violin -> Charts.Violin.data_range(series)
       :range_bar -> Charts.RangeBar.data_range(series)
       t when t in [:scatter, :bubble] -> Charts.Scatter.data_range(series)
       _ -> numeric_data_range(cfg, series)
@@ -1273,6 +1291,7 @@ defmodule EexCharts.Renderer do
     case cfg.chart.type do
       :candlestick -> Charts.Candlestick.tooltip_value(cfg, v)
       :box_plot -> Charts.BoxPlot.tooltip_value(cfg, v)
+      :violin -> Charts.Violin.tooltip_value(cfg, v)
       :range_bar -> Charts.RangeBar.tooltip_value(cfg, v)
       t when t in [:scatter, :bubble] -> Charts.Scatter.tooltip_value(cfg, v)
       _ -> format_tooltip_y(cfg, point_y(v))

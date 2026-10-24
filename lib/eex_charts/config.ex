@@ -308,7 +308,27 @@ defmodule EexCharts.Config do
           wick: %{use_fill_color: true}
         },
         box_plot: %{
-          colors: %{upper: "#00E396", lower: "#008FFB"}
+          colors: %{upper: "#00E396", lower: "#008FFB"},
+          # Raw-observation boxes: Tukey fence multiple (see EexCharts.Stats).
+          whisker: 1.5
+        },
+        # See EexCharts.Charts.Histogram.
+        histogram: %{
+          bins: :auto,
+          bin_width: nil,
+          normalize: :count,
+          cumulative: false,
+          overlay_opacity: 0.5
+        },
+        # See EexCharts.Charts.Violin.
+        violin: %{
+          bandwidth: :silverman,
+          cut: 2,
+          points: 64,
+          scale: :width,
+          inner: :box,
+          raincloud: false,
+          point_size: 2.5
         },
         bubble: %{
           min_bubble_radius: nil,
@@ -566,6 +586,28 @@ defmodule EexCharts.Config do
       data_labels: %{enabled: false},
       stroke: %{width: 1, colors: ["#24292e"]},
       fill: %{opacity: 1},
+      tooltip: %{shared: false, intersect: true},
+      xaxis: %{tick_placement: :between}
+    }
+  end
+
+  defp type_defaults(:histogram) do
+    %{
+      data_labels: %{enabled: false},
+      stroke: %{width: 0},
+      fill: %{opacity: 0.85},
+      legend: %{markers: %{shape: :square}},
+      tooltip: %{shared: false, intersect: true},
+      xaxis: %{type: :numeric}
+    }
+  end
+
+  defp type_defaults(:violin) do
+    %{
+      data_labels: %{enabled: false},
+      stroke: %{width: 1},
+      fill: %{opacity: 0.5},
+      legend: %{markers: %{shape: :square}},
       tooltip: %{shared: false, intersect: true},
       xaxis: %{tick_placement: :between}
     }
