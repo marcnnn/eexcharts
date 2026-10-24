@@ -207,8 +207,22 @@ defmodule EexCharts.Charts.Treemap do
               el(
                 "text",
                 %{
-                  x: c.x + c.w / 2 + cfg.data_labels.offset_x,
-                  y: c.y + c.h / 2 + cfg.stroke.width / 2 + font / 3 + cfg.data_labels.offset_y,
+                  x:
+                    c.x + c.w / 2 +
+                      EexCharts.DataLabels.offset(
+                        cfg.data_labels.offset_x,
+                        c.value,
+                        c.series,
+                        c.j
+                      ),
+                  y:
+                    c.y + c.h / 2 + cfg.stroke.width / 2 + font / 3 +
+                      EexCharts.DataLabels.offset(
+                        cfg.data_labels.offset_y,
+                        c.value,
+                        c.series,
+                        c.j
+                      ),
                   text_anchor: "middle",
                   dominant_baseline: "central",
                   fill: color,

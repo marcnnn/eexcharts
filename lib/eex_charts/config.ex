@@ -116,6 +116,9 @@ defmodule EexCharts.Config do
         # `drawDataLabel({strokeWidth = 2})`.
         stroke_width: 2,
         formatter: nil,
+        # Drop labels whose estimated boxes collide, balanced across series
+        # (see `EexCharts.DataLabels`).
+        hide_overlapping: false,
         style: %{
           font_size: 12,
           font_weight: 600,
