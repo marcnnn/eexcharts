@@ -33,9 +33,14 @@ defmodule EexCharts.MixProject do
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger] ++ test_applications(Mix.env())
     ]
   end
+
+  # The SVG invariant suite (test/support/svg_invariants.ex) parses output
+  # with OTP's :xmerl, which Mix only puts on the code path when declared.
+  defp test_applications(:test), do: [:xmerl]
+  defp test_applications(_), do: []
 
   defp description do
     "Server-side rendered SVG charts for Phoenix LiveView, modeled on ApexCharts.js. " <>
@@ -82,6 +87,7 @@ defmodule EexCharts.MixProject do
         "README.md",
         "CHANGELOG.md",
         "docs/KNOWN_ISSUES.md",
+        "docs/VALIDATION.md",
         "CONTRIBUTING.md",
         "NOTICE.md"
       ]
