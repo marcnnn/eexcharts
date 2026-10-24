@@ -339,6 +339,9 @@ defmodule EexCharts.Config do
           offset_y: 0,
           hollow: %{size: "50%", margin: 5, background: "transparent"},
           track: %{show: true, background: "#f2f2f2", stroke_width: "97%", margin: 5, opacity: 1},
+          # Target markers per series (see EexCharts.Charts.RadialBar).
+          targets: [],
+          target: %{color: nil, width: 3, overhang: 3},
           data_labels: %{
             show: true,
             name: %{show: true, font_size: 16, font_weight: 600, color: nil, offset_y: 0},
@@ -360,6 +363,36 @@ defmodule EexCharts.Config do
             }
           }
         },
+        gauge: %{
+          start_angle: -90,
+          end_angle: 90,
+          min: 0,
+          max: 100,
+          offset_x: 0,
+          offset_y: 0,
+          thickness: "18%",
+          track: %{show: true, background: "#f2f2f2"},
+          value_arc: %{show: true, color: nil},
+          bands: [],
+          band_gap: 2,
+          ticks: %{
+            show: true,
+            amount: 10,
+            length: 8,
+            width: 1,
+            color: nil,
+            offset: 4,
+            minor: %{amount: 0, length: 4}
+          },
+          tick_labels: %{show: true, font_size: 11, color: nil, offset: 4, formatter: nil},
+          needle: %{show: true, length: "90%", width: 8, color: nil},
+          hub: %{radius: 8, color: nil, stroke_color: "#fff", stroke_width: 2},
+          data_labels: %{
+            show: true,
+            value: %{font_size: 24, font_weight: 600, color: nil, offset_y: 0, formatter: nil},
+            name: %{show: true, font_size: 13, font_weight: 400, color: nil, offset_y: 0}
+          }
+        },
         polar_area: %{
           rings: %{stroke_width: 1, stroke_color: "#e8e8e8"},
           spokes: %{stroke_width: 1, connector_colors: "#e8e8e8"}
@@ -371,6 +404,10 @@ defmodule EexCharts.Config do
           offset_x: 0,
           offset_y: 0,
           custom_scale: 1,
+          # Rounded slice corners and a constant pixel gap between slices
+          # (pie, donut, polar area); see EexCharts.Charts.Pie.
+          border_radius: 0,
+          spacing: 0,
           data_labels: %{offset: 0, min_angle_to_show_label: 10},
           donut: %{
             size: "65%",
@@ -527,6 +564,16 @@ defmodule EexCharts.Config do
     %{
       data_labels: %{enabled: false},
       stroke: %{line_cap: :butt},
+      fill: %{opacity: 1},
+      tooltip: %{enabled: false},
+      legend: %{show: false},
+      grid: %{show: false}
+    }
+  end
+
+  defp type_defaults(:gauge) do
+    %{
+      data_labels: %{enabled: false},
       fill: %{opacity: 1},
       tooltip: %{enabled: false},
       legend: %{show: false},
