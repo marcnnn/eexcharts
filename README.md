@@ -18,6 +18,14 @@ bindings, so selections arrive as ordinary LiveView events.
 - **Chart types:** line, area, bar/column (grouped, stacked, horizontal,
   distributed), pie, donut, scatter, bubble, candlestick, box plot, range
   bar, heatmap, treemap (squarified), radar, radial bar, polar area
+- **Beyond v4.7.0** (built from the behaviour described in later public
+  release notes, see [docs/PARITY.md](docs/PARITY.md)): histogram, violin and
+  raincloud, box plots from raw observations, sunburst, nested treemaps,
+  funnel and pyramid, waterfall, dumbbell, grouped and 100% stacks, stacked
+  and 100% area/line, streamgraph, gauge, radial-bar targets, unit charts
+  (grid, parliament, beeswarm) and waffle, trellis small multiples,
+  continuous heatmap x-axes with a gradient legend, pie slice spacing and
+  corner radius, annotation dash patterns, balanced data-label hiding
 - **Curves:** `:smooth` (ApexCharts' 35% bezier), `:straight`, `:stepline`,
   `:monotone_cubic` (Fritsch–Carlson), with `nil`-value gaps
 - **Axes:** category, numeric, and datetime x-axes (ported TimeScale tick
@@ -287,6 +295,21 @@ independent of grouping and stay frozen — they name the committed SVG goldens
 in `test/snapshots/`.
 
 ### Visual regression testing
+
+Every example in `Dev.ChartExamples` runs through the layers below
+automatically. [docs/VALIDATION.md](docs/VALIDATION.md) explains how a chart
+is judged correct in the first place, without an upstream reference to diff
+against (invariant lint, numeric oracles, contact-sheet review).
+
+**0. Invariant lint** (`test/svg_invariants_test.exs`): every example is
+rendered static, static dark, and live, then parsed and checked for
+non-finite numbers, elements outside the viewBox, overlapping labels,
+unreadable label contrast, dangling `url(#id)` references and legend counts.
+For a quick human review of all examples, light and dark side by side:
+
+```sh
+mix run dev/contact_sheet.exs --png   # tmp/contact_sheet.html + .png
+```
 
 Two layers guard against visual regressions:
 

@@ -88,6 +88,7 @@ defmodule EexCharts.MixProject do
         "CHANGELOG.md",
         "docs/KNOWN_ISSUES.md",
         "docs/VALIDATION.md",
+        "docs/PARITY.md",
         "CONTRIBUTING.md",
         "NOTICE.md"
       ]
