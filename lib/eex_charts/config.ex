@@ -32,6 +32,7 @@ defmodule EexCharts.Config do
   def build(type, opts \\ %{}) when is_map(opts) do
     defaults()
     |> deep_merge(type_defaults(type))
+    |> deep_merge(EexCharts.Charts.BarFamily.option_defaults(type, opts))
     |> deep_merge(opts)
     |> Map.update!(:chart, &Map.put(&1, :type, type))
     |> EexCharts.Theme.apply(opts)
@@ -261,7 +262,18 @@ defmodule EexCharts.Config do
         # them from font metrics. Opting in hands the same job to the same
         # engine and the two agree exactly.
         html: false,
-        markers: %{size: 6, shape: :circle, stroke_width: 0, stroke_color: nil, radius: nil},
+        markers: %{
+          size: 6,
+          shape: :circle,
+          stroke_width: 0,
+          stroke_color: nil,
+          radius: nil,
+          # Per-item marker colours (ApexCharts `legend.markers.fillColors`).
+          fill_colors: nil
+        },
+        # Legend entries that replace the series names (ApexCharts
+        # `legend.customLegendItems`); toggling is off while they are set.
+        custom_legend_items: [],
         item_margin: %{horizontal: 5, vertical: 4},
         labels: %{colors: nil, use_series_colors: false}
       },
@@ -295,7 +307,13 @@ defmodule EexCharts.Config do
           border_radius: 0,
           border_radius_application: :around,
           distributed: false,
-          data_labels: %{position: :top}
+          data_labels: %{position: :top},
+          # ApexCharts v4.7.0 funnel / dumbbell switches (see
+          # `EexCharts.Charts.Funnel` and `EexCharts.Charts.Dumbbell`).
+          is_funnel: false,
+          is_funnel_3d: true,
+          is_dumbbell: false,
+          dumbbell_colors: nil
         },
         candlestick: %{
           colors: %{upward: "#00B746", downward: "#EF403C"},
@@ -511,6 +529,8 @@ defmodule EexCharts.Config do
       xaxis: %{tick_placement: :between}
     }
   end
+
+  defp type_defaults(:waterfall), do: EexCharts.Charts.Waterfall.type_defaults()
 
   defp type_defaults(:radar) do
     %{

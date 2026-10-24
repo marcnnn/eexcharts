@@ -33,6 +33,7 @@ defmodule EexCharts.Renderer do
     type = params[:type] || :line
     id = params[:id] || "eexcharts"
     params = if params[:static], do: staticize_params(params), else: params
+    {type, params} = Charts.BarFamily.resolve(type, params)
 
     opts =
       (params[:options] || %{})
@@ -40,7 +41,7 @@ defmodule EexCharts.Renderer do
       |> put_if(params[:height], [:chart, :height])
       |> put_if(params[:categories], [:xaxis, :categories])
 
-    cfg = Config.build(type, opts)
+    cfg = Config.build(type, opts) |> Charts.BarFamily.finalize(params)
     cfg = if params[:static], do: staticize_cfg(cfg), else: cfg
 
     cond do
@@ -109,7 +110,7 @@ defmodule EexCharts.Renderer do
     hidden = hidden_set(params)
     series = Enum.reject(all_series, &MapSet.member?(hidden, &1.index))
 
-    names = Enum.map(all_series, & &1.name)
+    names = Legend.names(cfg, Enum.map(all_series, & &1.name))
     n = series |> Enum.map(&length(&1.data)) |> Enum.max(fn -> 0 end)
     n = max(n, length(cfg.xaxis.categories))
 
@@ -130,7 +131,7 @@ defmodule EexCharts.Renderer do
 
     categories = categories(cfg, n)
 
-    bar? = cfg.chart.type == :bar
+    bar? = cfg.chart.type in [:bar, :waterfall]
 
     series_io =
       case cfg.chart.type do
@@ -146,6 +147,9 @@ defmodule EexCharts.Renderer do
 
         :range_bar ->
           Charts.RangeBar.render(cfg, series, l, on_click: params[:on_click])
+
+        :waterfall ->
+          Charts.Waterfall.render(cfg, series, l, on_click: params[:on_click])
 
         t when t in [:scatter, :bubble] ->
           Charts.Scatter.render(cfg, series, l, id, on_click: params[:on_click])
@@ -178,8 +182,8 @@ defmodule EexCharts.Renderer do
         EexCharts.Annotations.render(cfg, l),
         axes(cfg, l, categories),
         Legend.render(l.legend, cfg, l,
-          hidden: hidden,
-          on_click: params[:on_legend_click]
+          hidden: if(Legend.custom?(cfg), do: MapSet.new(), else: hidden),
+          on_click: if(Legend.custom?(cfg), do: nil, else: params[:on_legend_click])
         ),
         hover_markers,
         crosshair(cfg, l),
@@ -205,7 +209,12 @@ defmodule EexCharts.Renderer do
       |> Enum.with_index()
       |> Enum.map(fn
         {%{} = s, i} ->
-          %{name: to_string(s[:name] || "series-#{i + 1}"), data: s[:data] || [], index: i}
+          %{
+            name: to_string(s[:name] || "series-#{i + 1}"),
+            data: s[:data] || [],
+            index: i,
+            group: s[:group]
+          }
 
         {other, i} ->
           %{name: "series-#{i + 1}", data: List.wrap(other), index: i}
@@ -218,6 +227,8 @@ defmodule EexCharts.Renderer do
       :candlestick -> Charts.Candlestick.data_range(series)
       :box_plot -> Charts.BoxPlot.data_range(series)
       :range_bar -> Charts.RangeBar.data_range(series)
+      :waterfall -> Charts.Waterfall.data_range(series)
+      :bar -> Charts.StackGroups.data_range(cfg, series) || numeric_data_range(cfg, series)
       t when t in [:scatter, :bubble] -> Charts.Scatter.data_range(series)
       _ -> numeric_data_range(cfg, series)
     end
@@ -828,6 +839,7 @@ defmodule EexCharts.Renderer do
     if cfg.data_labels.enabled do
       case cfg.chart.type do
         :bar -> bar_data_labels(cfg, series, l)
+        :waterfall -> Charts.Waterfall.data_labels(cfg, series, l)
         _ -> point_data_labels(cfg, series, l)
       end
     else
@@ -1102,10 +1114,10 @@ defmodule EexCharts.Renderer do
             Enum.map(series, fn s ->
               v = Enum.at(s.data, j)
 
-              if v == nil do
-                []
-              else
-                tooltip_row(Config.color_at(cfg, s.index), s.name, tooltip_value(cfg, v))
+              cond do
+                v == nil -> []
+                cfg.chart.type == :waterfall -> Charts.Waterfall.tooltip_rows(cfg, s, v)
+                true -> tooltip_row(Config.color_at(cfg, s.index), s.name, tooltip_value(cfg, v))
               end
             end)
 
