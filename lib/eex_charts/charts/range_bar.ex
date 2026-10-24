@@ -17,7 +17,13 @@ defmodule EexCharts.Charts.RangeBar do
   alias EexCharts.{Charts, Config, Layout}
 
   @doc "Renders range bar series into the cartesian grid."
-  def render(cfg, series, %Layout{} = l, opts \\ []) do
+  def render(cfg, series, l, opts \\ [])
+
+  def render(%{plot_options: %{bar: %{is_dumbbell: true}}} = cfg, series, %Layout{} = l, opts) do
+    Charts.Dumbbell.render(cfg, series, l, opts)
+  end
+
+  def render(cfg, series, %Layout{} = l, opts) do
     on_click = opts[:on_click]
 
     cfg
@@ -159,9 +165,11 @@ defmodule EexCharts.Charts.RangeBar do
     end
   end
 
-  defp range(%{y: [from, to | _]}), do: [from, to]
-  defp range([from, to | _]), do: [from, to]
-  defp range(_), do: nil
+  @doc false
+  # `[from, to]` of one data point, or nil.
+  def range(%{y: [from, to | _]}), do: [from, to]
+  def range([from, to | _]), do: [from, to]
+  def range(_), do: nil
 
   defp clamp(l, v), do: v |> max(l.scale.nice_min) |> min(l.scale.nice_max)
 

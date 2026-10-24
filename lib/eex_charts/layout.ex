@@ -57,7 +57,11 @@ defmodule EexCharts.Layout do
   def build(cfg, names, n, y_ranges, x_range) when is_list(y_ranges) do
     w = dim(cfg.chart.width, 600)
     h = dim(cfg.chart.height, 350)
-    horizontal = get_in(cfg, [:plot_options, :bar, :horizontal]) == true && cfg.chart.type == :bar
+
+    horizontal =
+      get_in(cfg, [:plot_options, :bar, :horizontal]) == true &&
+        cfg.chart.type in [:bar, :range_bar]
+
     pad = cfg.grid.padding
 
     title_h = if cfg.title.text, do: cfg.title.style.font_size + cfg.title.margin + 4, else: 0

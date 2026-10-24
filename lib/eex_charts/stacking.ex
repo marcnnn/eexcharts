@@ -57,7 +57,7 @@ defmodule EexCharts.Stacking do
   def enabled?(_cfg), do: false
 
   @doc "True for `chart.stack_type: \"100%\"`."
-  def percent?(cfg), do: cfg.chart[:stack_type] in ["100%", :percent]
+  def percent?(cfg), do: cfg.chart[:stack_type] in ["100%", :"100%", :percent]
 
   @doc """
   Adjusts the config for stacking: a hidden y-axis for streamgraphs and a

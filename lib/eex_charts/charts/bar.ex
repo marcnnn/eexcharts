@@ -25,9 +25,8 @@ defmodule EexCharts.Charts.Bar do
       |> Enum.group_by(& &1.series)
       |> Enum.sort_by(fn {i, _} -> i end)
       |> Enum.map(fn {i, rects} ->
-        el(
-          "g",
-          %{class: "eexcharts-series"},
+        el("g", %{class: "eexcharts-series"}, [
+          EexCharts.Charts.Funnel.connectors(cfg, rects),
           Enum.map(rects, fn r ->
             attrs = %{
               class: "eexcharts-bar",
@@ -53,7 +52,7 @@ defmodule EexCharts.Charts.Bar do
 
             el("path", attrs)
           end)
-        )
+        ])
       end)
 
     {io, bars}
@@ -64,10 +63,15 @@ defmodule EexCharts.Charts.Bar do
   positive}` with `{x, y}` the top-left corner.
   """
   def positions(cfg, series, %Layout{} = l) do
-    if l.horizontal do
-      horizontal_positions(cfg, series, l)
-    else
-      column_positions(cfg, series, l)
+    cond do
+      EexCharts.Charts.StackGroups.applies?(cfg, series) ->
+        EexCharts.Charts.StackGroups.positions(cfg, series, l)
+
+      l.horizontal ->
+        cfg |> horizontal_positions(series, l) |> EexCharts.Charts.Funnel.center(cfg, l)
+
+      true ->
+        column_positions(cfg, series, l)
     end
   end
 
@@ -244,14 +248,16 @@ defmodule EexCharts.Charts.Bar do
     end
   end
 
-  defp pct(value) when is_binary(value) do
+  @doc false
+  # A `column_width` / `bar_height` option as a percentage number.
+  def pct(value) when is_binary(value) do
     case Integer.parse(value) do
       {n, _} -> n
       :error -> 70
     end
   end
 
-  defp pct(value) when is_number(value), do: value
+  def pct(value) when is_number(value), do: value
 
   @doc false
   # Builds the bar path, rounding corners according to border_radius settings.
