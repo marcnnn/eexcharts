@@ -35,23 +35,6 @@ defmodule EexCharts.SvgInvariantsTest do
       reason:
         "bubble at the x-axis maximum (r=26) is centred on the plot edge, so 9.6px " <>
           "of it falls past the right edge of the SVG and is cut off"
-    },
-    %{
-      id: "n13",
-      variant: "static dark",
-      check: :contrast,
-      element: "^text\\.eexcharts-annotation-label",
-      reason:
-        "dark theme: annotation label text takes chart.fore_color (#f6f7f8) while the " <>
-          "label box keeps its #fff background, so labels are white on white " <>
-          "(ApexCharts v4 behaves the same; still unreadable)"
-    },
-    %{
-      id: "n18",
-      variant: "static dark",
-      check: :contrast,
-      element: "^text\\.eexcharts-annotation-label",
-      reason: "same dark-theme annotation label defect as n13"
     }
   ]
 
@@ -151,6 +134,33 @@ defmodule EexCharts.SvgInvariantsTest do
       _ -> []
     end
   end
+
+  # Types whose legend does not list series: waterfall shows the bar kinds
+  # (increase / decrease / total), dumbbell one item per end, and a heatmap
+  # gradient legend is a colour bar with no items at all.
+  defp expected_legend_entries(%{type: t}) when t in [:waterfall, :dumbbell], do: nil
+
+  defp expected_legend_entries(%{type: :heatmap, options: %{legend: %{gradient: g}}})
+       when g not in [nil, false],
+       do: nil
+
+  # Sunburst: one entry per top-level branch, which is each point of a single
+  # series, or each series when there are several.
+  defp expected_legend_entries(%{type: :sunburst, series: [%{data: data}]}), do: length(data)
+
+  # Unit and waffle (grid / parliament): one entry per category, which is
+  # each point when a single series carries `%{x:, y:}` points.
+  defp expected_legend_entries(%{type: t, series: [%{data: [%{x: _} | _] = data}]} = example)
+       when t in [:unit, :waffle] do
+    if get_in(example, [:options, :plot_options, :unit, :layout]) == :beeswarm,
+      do: 1,
+      else: length(data)
+  end
+
+  # Trellis: one shared legend keyed by series name, so a name repeated across
+  # panels is a single entry.
+  defp expected_legend_entries(%{options: %{trellis: %{}}, series: series}),
+    do: series |> Enum.map(& &1.name) |> Enum.uniq() |> length()
 
   defp expected_legend_entries(%{series: series} = example) do
     cond do

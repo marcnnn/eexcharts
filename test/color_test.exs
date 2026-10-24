@@ -58,4 +58,28 @@ defmodule EexCharts.ColorTest do
       assert Color.resolve_vars("transparent") == "transparent"
     end
   end
+
+  describe "contrast/2 and legible/3" do
+    test "contrast matches the WCAG reference values" do
+      assert_in_delta Color.contrast("#000000", "#ffffff"), 21.0, 1.0e-9
+      assert_in_delta Color.contrast("#fff", "#fff"), 1.0, 1.0e-9
+    end
+
+    test "keeps legible ApexCharts defaults, including weak-but-readable pairs" do
+      assert Color.legible("#fff", "#008FFB") == "#fff"
+      # 1.9:1 - poor, but ApexCharts' own light-theme default; left alone.
+      assert Color.legible("#fff", "#FEB019") == "#fff"
+    end
+
+    test "replaces near-invisible pairs with the better of white and dark grey" do
+      assert Color.legible("#f6f7f8", "#fff") == "#373d3f"
+      assert Color.legible("#fff", "#c7f464") == "#373d3f"
+      assert Color.legible("#ffffff", "#111111") == "#ffffff"
+    end
+
+    test "leaves colours it cannot inspect unchanged" do
+      assert Color.legible("var(--color-base-content)", "#fff") == "var(--color-base-content)"
+      assert Color.legible("#fff", "white") == "#fff"
+    end
+  end
 end

@@ -1038,7 +1038,7 @@ defmodule EexCharts.Renderer do
 
           text_color =
             if dl.background.enabled,
-              do: dl.background.fore_color,
+              do: EexCharts.Color.legible(dl.background.fore_color, color),
               else: data_label_color(dl, i, color)
 
           box =

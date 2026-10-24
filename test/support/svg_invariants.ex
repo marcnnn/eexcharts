@@ -263,7 +263,8 @@ defmodule EexCharts.SvgInvariants do
       bold: false,
       hidden: false,
       group: nil,
-      metrics: metrics
+      metrics: metrics,
+      nested?: false
     }
 
     walk(svg, ctx)
@@ -276,6 +277,8 @@ defmodule EexCharts.SvgInvariants do
         _ -> identity()
       end
 
+    own = mul(nested_viewport(node, ctx), own)
+
     attrs = node.attrs
     class = attrs["class"]
 
@@ -287,7 +290,8 @@ defmodule EexCharts.SvgInvariants do
         baseline: attrs["dominant-baseline"] || attrs["alignment-baseline"] || ctx.baseline,
         anchor: attrs["text-anchor"] || ctx.anchor,
         hidden: ctx.hidden or hidden?(node),
-        group: if(class, do: class, else: ctx.group)
+        group: if(class, do: class, else: ctx.group),
+        nested?: ctx.nested? or node.name == "svg"
     }
 
     item = %{node: node, ctx: ctx}
@@ -691,6 +695,28 @@ defmodule EexCharts.SvgInvariants do
       do: {:ok, @num_re |> Regex.scan(v) |> Enum.map(fn [n] -> to_f(n) end)},
       else: {:error, "unparsable #{inspect(leftover)} in #{inspect(v)}"}
   end
+
+  # A nested `<svg>` (trellis panels) opens a new viewport: its content is
+  # placed at `x`/`y` and its viewBox scaled onto `width`/`height`. The root
+  # `<svg>` is the reference frame itself, so it maps to identity.
+  defp nested_viewport(%{name: "svg", attrs: attrs}, %{nested?: true}) do
+    x = to_f(attrs["x"] || "0")
+    y = to_f(attrs["y"] || "0")
+
+    {sx, sy, vx, vy} =
+      with vb when is_binary(vb) <- attrs["viewBox"],
+           {:ok, {vx, vy, vw, vh}} when vw > 0 and vh > 0 <- view_box(vb),
+           w when is_binary(w) <- attrs["width"],
+           h when is_binary(h) <- attrs["height"] do
+        {to_f(w) / vw, to_f(h) / vh, vx, vy}
+      else
+        _ -> {1.0, 1.0, 0.0, 0.0}
+      end
+
+    {sx, 0.0, 0.0, sy, x - vx * sx, y - vy * sy}
+  end
+
+  defp nested_viewport(_node, _ctx), do: identity()
 
   @doc "Parses a `transform` list into an affine matrix `{a, b, c, d, e, f}`."
   def transform(v) do

@@ -159,7 +159,11 @@ defmodule EexCharts.Layout do
     # half of each overflows. ApexCharts reserves that overhang
     # (`additionalPaddingXLabels` → xPadLeft/xPadRight); without it the outer
     # labels are clipped by the SVG viewBox.
-    {x_pad_left, x_pad_right} = x_label_overhang(cfg, x_scale)
+    {x_pad_left, x_pad_right} =
+      if x_scale,
+        do: x_label_overhang(cfg, x_scale),
+        else: category_edge_overhang(cfg, n, horizontal, grid_x, right)
+
     grid_x = grid_x + x_pad_left
     grid_w = max(grid_w - x_pad_left - x_pad_right, 10)
 
@@ -257,6 +261,32 @@ defmodule EexCharts.Layout do
       {0, 0}
     end
   end
+
+  # Line/area category axes (`tick_placement: :on`) put the first and last
+  # labels on the plot edges, so half of each hangs outside the plot. Reserve
+  # only what the existing gutter cannot absorb: a label that already fits
+  # moves nothing, a long last category ("2024" at 600px) no longer clips.
+  # Overhangs within the 2px error of the width estimate are left alone.
+  defp category_edge_overhang(cfg, n, horizontal, left_gutter, right_gutter) do
+    labels = cfg.xaxis.labels
+
+    if labels.show and n > 1 and not horizontal and (labels.rotate || 0) == 0 and
+         cfg.xaxis.tick_placement != :between and cfg.chart.type != :box_plot do
+      cats = cfg.xaxis.categories
+      first = if cats == [], do: "1", else: hd(cats)
+      last = if cats == [], do: Integer.to_string(n), else: Enum.at(cats, n - 1, List.last(cats))
+
+      half =
+        &(LabelText.width(to_string(&1), labels.style.font_size, metrics(cfg, labels.style)) / 2)
+
+      {edge_overflow(half.(first), left_gutter), edge_overflow(half.(last), right_gutter)}
+    else
+      {0, 0}
+    end
+  end
+
+  defp edge_overflow(half, gutter) when half - gutter > 2, do: half - gutter
+  defp edge_overflow(_half, _gutter), do: 0
 
   defp label_text(cfg, type, %{value: v, label: label}) do
     input = if type == :numeric, do: v, else: label

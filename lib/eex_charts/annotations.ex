@@ -591,7 +591,7 @@ defmodule EexCharts.Annotations do
             y: y,
             text_anchor: anchor,
             dominant_baseline: "central",
-            fill: style.color || cfg.chart.fore_color,
+            fill: style.color || EexCharts.Color.legible(cfg.chart.fore_color, style.background),
             font_size: fs,
             font_weight: style.font_weight,
             class: "eexcharts-annotation-label"
