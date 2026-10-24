@@ -319,7 +319,21 @@ defmodule EexCharts.Config do
           distributed: false,
           enable_shades: true,
           shade_intensity: 0.5,
-          border_radius: 4
+          border_radius: 4,
+          # Nested treemaps (nodes with `children`): gap between a group's
+          # frame and its children, and the name band at the top of a group.
+          group_padding: 3,
+          group_header: %{show: true, font_size: 12, font_weight: 600, color: "#fff"}
+        },
+        sunburst: %{
+          start_angle: 0,
+          end_angle: 360,
+          offset_x: 0,
+          offset_y: 0,
+          hole_size: "25%",
+          shade_intensity: 0.5,
+          labels: %{orientation: :auto, padding: 4},
+          total: %{show: true, label: "Total", formatter: nil}
         },
         radar: %{
           size: nil,
@@ -556,6 +570,17 @@ defmodule EexCharts.Config do
       legend: %{show: false},
       grid: %{show: false},
       tooltip: %{shared: false, intersect: true}
+    }
+  end
+
+  defp type_defaults(:sunburst) do
+    %{
+      # `colors: nil` (the default) picks white or dark text per arc.
+      data_labels: %{enabled: true, style: %{font_size: 11}},
+      stroke: %{colors: ["#fff"], width: 1},
+      fill: %{opacity: 1},
+      tooltip: %{theme: :dark},
+      legend: %{position: :right}
     }
   end
 
