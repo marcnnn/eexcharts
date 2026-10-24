@@ -16,7 +16,9 @@ defmodule EexCharts.Renderer do
     radar: Charts.Radar,
     heatmap: Charts.Heatmap,
     treemap: Charts.Treemap,
-    sunburst: Charts.Sunburst
+    sunburst: Charts.Sunburst,
+    unit: Charts.Unit,
+    waffle: Charts.Unit
   }
 
   @doc """
