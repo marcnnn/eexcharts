@@ -321,6 +321,20 @@ defmodule EexCharts.Config do
           shade_intensity: 0.5,
           border_radius: 4
         },
+        unit: %{
+          layout: :grid,
+          per_unit: 1,
+          max_units: 2000,
+          # `nil`: :square for grid and parliament, :circle for the beeswarm.
+          shape: nil,
+          size: nil,
+          gap: 2,
+          radius: nil,
+          rows: nil,
+          columns: nil,
+          fill_order: :row,
+          parliament: %{inner_radius: 0.4, rows: nil, show_total: true}
+        },
         radar: %{
           size: nil,
           offset_x: 0,
@@ -557,6 +571,20 @@ defmodule EexCharts.Config do
       grid: %{show: false},
       tooltip: %{shared: false, intersect: true}
     }
+  end
+
+  defp type_defaults(:unit) do
+    %{
+      data_labels: %{enabled: false},
+      fill: %{opacity: 1},
+      tooltip: %{shared: false, intersect: true}
+    }
+  end
+
+  defp type_defaults(:waffle) do
+    :unit
+    |> type_defaults()
+    |> deep_merge(%{plot_options: %{unit: %{layout: :grid, rows: 10, columns: 10}}})
   end
 
   defp type_defaults(:polar_area) do

@@ -15,7 +15,9 @@ defmodule EexCharts.Renderer do
     radial_bar: Charts.RadialBar,
     radar: Charts.Radar,
     heatmap: Charts.Heatmap,
-    treemap: Charts.Treemap
+    treemap: Charts.Treemap,
+    unit: Charts.Unit,
+    waffle: Charts.Unit
   }
 
   @doc """
