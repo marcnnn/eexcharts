@@ -642,6 +642,10 @@ defmodule EexCharts.Renderer do
     end
   end
 
+  @doc false
+  # Value x-axis labels for charts that own their SVG assembly (heatmap).
+  def value_x_axis_labels(cfg, %Layout{} = l), do: category_axis_labels(cfg, l, [])
+
   # Value x-axis (numeric / datetime): labels sit at scale-tick positions,
   # placed by x value rather than category slot.
   defp category_axis_labels(cfg, %Layout{x_scale: xs} = l, _categories) when is_map(xs) do
