@@ -394,7 +394,8 @@ defmodule EexCharts.Layout do
     lmin = safe_log(scale.nice_min, lb)
     lmax = safe_log(scale.nice_max, lb)
     range = lmax - lmin
-    lv = safe_log(v, lb)
+    # Zero and negatives have no logarithm; pin them to the axis floor.
+    lv = if is_number(v) and v <= 0, do: lmin, else: safe_log(v, lb)
     l.grid_y + l.grid_h - (lv - lmin) / range * l.grid_h
   end
 

@@ -63,7 +63,8 @@ const EexCharts = {
     });
 
     const pushEvent = this.el.dataset.pushHover;
-    if (pushEvent) {
+    // Annotation tips use non-numeric keys ("anno-0"); only data points push.
+    if (pushEvent && /^\d+$/.test(j)) {
       this.pushEvent(pushEvent, { id: this.el.id, index: parseInt(j, 10) });
     }
   },
