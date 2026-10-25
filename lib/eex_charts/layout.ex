@@ -245,8 +245,6 @@ defmodule EexCharts.Layout do
   # first label overhangs on the left too, but the y-axis gutter already
   # absorbs it, which is also what ApexCharts' `additionalPaddingXLabels` ends
   # up doing for a numeric axis with y labels.
-  defp x_label_overhang(_cfg, nil), do: {0, 0}
-
   defp x_label_overhang(cfg, %{ticks: ticks, type: type}) do
     if cfg.xaxis.labels.show and ticks != [] and (cfg.xaxis.labels.rotate || 0) == 0 do
       font = cfg.xaxis.labels.style.font_size

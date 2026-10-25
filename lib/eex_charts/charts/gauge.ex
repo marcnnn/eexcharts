@@ -434,8 +434,6 @@ defmodule EexCharts.Charts.Gauge do
     if r == trunc(r), do: trunc(r), else: r
   end
 
-  defp clean(v), do: v
-
   defp polar(geo, r, angle) do
     {x, y} = Sector.pt(r, angle)
     {geo.cx + x, geo.cy + y}
