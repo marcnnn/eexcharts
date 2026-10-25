@@ -28,6 +28,11 @@ defmodule EexCharts.Charts.Scatter do
   Renders scatter/bubble series into the cartesian grid.
 
   Options: `:on_click` — a LiveView event name to fire per marker.
+
+  `markers.discrete` restyles single points, as in ApexCharts: a list of
+  `%{series_index:, data_point_index:}` maps with any of `fill_color`,
+  `stroke_color`, `stroke_width`, `size` and `shape`. A restyled marker also
+  gets the `eexcharts-marker-discrete` class, so CSS can re-tint it per theme.
   """
   def render(cfg, series, %Layout{} = l, _id, opts \\ []) do
     bubble? = cfg.chart.type == :bubble
@@ -38,6 +43,7 @@ defmodule EexCharts.Charts.Scatter do
         color = Config.color_at(cfg, s.index)
         scale = Layout.scale_for_series(l, s)
         shape = Marker.shape_for(cfg.markers.shape, s.index)
+        discrete = discrete_for(cfg, s.index)
 
         markers =
           cfg
@@ -47,25 +53,35 @@ defmodule EexCharts.Charts.Scatter do
               cx = Layout.x_value_pos(l, x)
               cy = Layout.y_for(l, y, scale)
               r = radius(cfg, z, zratio)
+              d = Map.get(discrete, j)
 
               attrs =
                 maybe_click(
-                  %{
-                    class: "eexcharts-marker",
-                    data_j: j,
-                    data_cx: cx,
-                    fill: Config.color_for(cfg.markers.colors, s.index) || color,
-                    fill_opacity: cfg.fill.opacity,
-                    stroke: Config.color_for(cfg.markers.stroke_colors, s.index),
-                    stroke_width: cfg.markers.stroke_width,
-                    stroke_opacity: cfg.markers.stroke_opacity
-                  },
+                  apply_discrete(
+                    %{
+                      class: "eexcharts-marker",
+                      data_j: j,
+                      data_cx: cx,
+                      fill: Config.color_for(cfg.markers.colors, s.index) || color,
+                      fill_opacity: cfg.fill.opacity,
+                      stroke: Config.color_for(cfg.markers.stroke_colors, s.index),
+                      stroke_width: cfg.markers.stroke_width,
+                      stroke_opacity: cfg.markers.stroke_opacity
+                    },
+                    d
+                  ),
                   opts[:on_click],
                   s.index,
                   j
                 )
 
-              Marker.render(shape, cx, cy, r, attrs)
+              Marker.render(
+                discrete_value(d, :shape, shape),
+                cx,
+                cy,
+                discrete_value(d, :size, r),
+                attrs
+              )
             else
               []
             end
@@ -76,6 +92,29 @@ defmodule EexCharts.Charts.Scatter do
 
     el("g", %{class: "eexcharts-scatter"}, groups)
   end
+
+  # `markers.discrete` entries for one series, keyed by data point index.
+  defp discrete_for(cfg, series_index) do
+    for d <- Map.get(cfg.markers, :discrete) || [],
+        d.series_index == series_index,
+        into: %{},
+        do: {d.data_point_index, d}
+  end
+
+  defp apply_discrete(attrs, nil), do: attrs
+
+  defp apply_discrete(attrs, d) do
+    %{
+      attrs
+      | class: attrs.class <> " eexcharts-marker-discrete",
+        fill: discrete_value(d, :fill_color, attrs.fill),
+        stroke: discrete_value(d, :stroke_color, attrs.stroke),
+        stroke_width: discrete_value(d, :stroke_width, attrs.stroke_width)
+    }
+  end
+
+  defp discrete_value(nil, _key, default), do: default
+  defp discrete_value(d, key, default), do: Map.get(d, key) || default
 
   # Same attribute contract as Bar/BoxPlot: the handler gets both indexes, so a
   # caller can map (series, index) back to whatever entity the point stands for.

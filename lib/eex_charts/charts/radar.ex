@@ -327,7 +327,7 @@ defmodule EexCharts.Charts.Radar do
               class: "eexcharts-xaxis-label",
               data_index: j
             },
-            LabelText.content(format_x_label(cfg, label, j), lx, grow(side))
+            LabelText.content(format_x_label(cfg, label, j), lx, grow(side), "central")
           )
         end)
 

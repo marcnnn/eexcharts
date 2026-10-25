@@ -11,7 +11,7 @@ defmodule EexCharts.LabelTextTest do
     params |> Renderer.render() |> SVG.to_iodata() |> IO.iodata_to_binary()
   end
 
-  describe "content/3" do
+  describe "content/4" do
     test "a plain string stays bare, escaped text" do
       assert html(LabelText.content("a < b", 10)) == "a &lt; b"
     end
@@ -39,6 +39,21 @@ defmodule EexCharts.LabelTextTest do
       assert html(LabelText.content(~w(a b c), 0, :up)) =~ ~s(<tspan dy="-2.4em" x="0">a)
       assert html(LabelText.content(~w(a b c), 0, :down)) =~ ~s(<tspan x="0">a)
       assert html(LabelText.content(["a"], 0, :up)) == ~s(<tspan x="0">a</tspan>)
+    end
+
+    # resvg/usvg (Typst) follow SVG 1.1, where dominant-baseline is not
+    # inherited: without the repeat a styled key renders like a superscript.
+    test "the text's baseline is repeated on every tspan it draws" do
+      out = html(LabelText.content([[@key, " Asset"], ["and Tracking"]], 5, :down, "central"))
+
+      assert out ==
+               ~s(<tspan dominant-baseline="central" x="5"><tspan dominant-baseline="central" fill="#FF4560" font-weight="700">01</tspan> Asset</tspan>) <>
+                 ~s(<tspan dominant-baseline="central" dy="1.2em" x="5">and Tracking</tspan>)
+
+      assert html(LabelText.content(%{text: "x", font_size: 9}, 0, :down, "central")) ==
+               ~s(<tspan dominant-baseline="central" font-size="9">x</tspan>)
+
+      assert html(LabelText.content("plain", 0, :down, "central")) == "plain"
     end
   end
 
@@ -72,7 +87,8 @@ defmodule EexCharts.LabelTextTest do
           options: %{xaxis: %{labels: %{formatter: fn c, _j -> [[@key, " ", c]] end}}}
         })
 
-      assert out =~ ~s(<tspan fill="#FF4560" font-weight="700">01</tspan> A)
+      assert out =~
+               ~s(<tspan dominant-baseline="central" fill="#FF4560" font-weight="700">01</tspan> A)
     end
 
     test "cartesian x-axis labels carry styled segments" do
@@ -100,7 +116,7 @@ defmodule EexCharts.LabelTextTest do
           })
         )
 
-      assert styled =~ ~s(<tspan fill="#999"> units</tspan>)
+      assert styled =~ ~s(<tspan dominant-baseline="central" fill="#999"> units</tspan>)
 
       label_x = fn out ->
         [_, x] = Regex.run(~r/class="eexcharts-yaxis-label"[^>]* x="([-\d.]+)"/, out)
