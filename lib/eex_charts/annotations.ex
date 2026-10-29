@@ -86,6 +86,19 @@ defmodule EexCharts.Annotations do
       `label.position` maps to horizontal placement (`:top` -> left,
       `:center` -> center, `:bottom` -> right).
 
+  With `xaxis.type: :datetime` or `:numeric` on a horizontal chart (a
+  timeline, see `EexCharts.Charts.RangeBar`), x-axis annotations follow
+  ApexCharts v4.7.0 instead, which places them on the value axis of a
+  horizontal chart (`invertAxis`): `x` / `x2` are values on the horizontal
+  axis and draw a **vertical** line or band with the label of a vertical
+  chart's x annotation (`label.orientation`, `label.position` `:top` /
+  `:center` / `:bottom`). A datetime axis accepts `Date`, `DateTime`,
+  `NaiveDateTime`, ISO 8601 strings and unix ms:
+
+      annotations: %{xaxis: [%{x: ~D[2026-10-29], label: %{text: "Today"}}]}
+
+  Values outside the axis range are skipped.
+
   ## Escaping
 
   All user-provided label text is escaped through `EexCharts.SVG.esc/1`.
@@ -225,10 +238,42 @@ defmodule EexCharts.Annotations do
   defp xaxis_annotation(cfg, l, anno0) do
     anno = Config.deep_merge(xaxis_defaults(), anno0)
 
-    if l.horizontal do
-      xaxis_horizontal(cfg, l, anno)
-    else
-      xaxis_vertical(cfg, l, anno)
+    cond do
+      l.horizontal and cfg.xaxis.type in [:datetime, :numeric] -> xaxis_value(cfg, l, anno)
+      l.horizontal -> xaxis_horizontal(cfg, l, anno)
+      true -> xaxis_vertical(cfg, l, anno)
+    end
+  end
+
+  # Horizontal chart with a value x-axis type: x values sit on the horizontal
+  # value axis -> vertical line / band, labelled like `xaxis_vertical/3`.
+  defp xaxis_value(cfg, l, anno) do
+    x1 = axis_value(cfg.xaxis.type, anno.x)
+    x2 = axis_value(cfg.xaxis.type, anno.x2)
+
+    cond do
+      not is_number(x1) ->
+        []
+
+      not is_number(x2) ->
+        if in_range?(l, x1) do
+          px = Layout.x_for(l, x1) + anno.offset_x
+          y1 = l.grid_y + anno.offset_y
+          y2 = l.grid_y + l.grid_h + anno.offset_y
+          [line(anno, px, y1, px, y2), xaxis_label(cfg, l, anno, px)]
+        else
+          []
+        end
+
+      band_visible?(l, x1, x2) ->
+        p1 = Layout.x_for(l, clamp(l, x1)) + anno.offset_x
+        p2 = Layout.x_for(l, clamp(l, x2)) + anno.offset_x
+        left = min(p1, p2)
+        y = l.grid_y + anno.offset_y
+        [band(anno, left, y, abs(p1 - p2), l.grid_h), xaxis_label(cfg, l, anno, left)]
+
+      true ->
+        []
     end
   end
 

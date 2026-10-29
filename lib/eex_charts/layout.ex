@@ -31,6 +31,7 @@ defmodule EexCharts.Layout do
             y_axes: [],
             x_scale: nil,
             x_type: :category,
+            value_labels: nil,
             legend: nil,
             title_h: 0
 
@@ -58,9 +59,7 @@ defmodule EexCharts.Layout do
     w = dim(cfg.chart.width, 600)
     h = dim(cfg.chart.height, 350)
 
-    horizontal =
-      get_in(cfg, [:plot_options, :bar, :horizontal]) == true &&
-        cfg.chart.type in [:bar, :range_bar]
+    horizontal = horizontal?(cfg)
 
     pad = cfg.grid.padding
 
@@ -79,8 +78,6 @@ defmodule EexCharts.Layout do
         {mn, mx} = Enum.at(y_ranges, i, hd(y_ranges))
         axis_scale(axis, mn, mx, svg_dim)
       end)
-
-    primary = hd(scales)
 
     x_font = cfg.xaxis.labels.style.font_size
     categories = cfg.xaxis.categories
@@ -155,14 +152,25 @@ defmodule EexCharts.Layout do
 
     x_scale = build_x_scale(cfg, x_range, grid_w)
 
+    # A timeline (horizontal range bars, `xaxis.type: :datetime`) keeps its
+    # categories down the left; the datetime axis is the horizontal value axis.
+    {scales, value_labels} =
+      if horizontal and cfg.chart.type == :range_bar and cfg.xaxis.type == :datetime,
+        do: time_value_scale(cfg, hd(y_ranges), grid_w, scales),
+        else: {scales, nil}
+
+    primary = hd(scales)
+
     # A value x-axis centers its first and last labels on the plot edges, so
     # half of each overflows. ApexCharts reserves that overhang
     # (`additionalPaddingXLabels` → xPadLeft/xPadRight); without it the outer
     # labels are clipped by the SVG viewBox.
     {x_pad_left, x_pad_right} =
-      if x_scale,
-        do: x_label_overhang(cfg, x_scale),
-        else: category_edge_overhang(cfg, n, horizontal, grid_x, right)
+      cond do
+        x_scale -> x_label_overhang(cfg, x_scale)
+        value_labels -> time_label_overhang(cfg, primary, value_labels, grid_w)
+        true -> category_edge_overhang(cfg, n, horizontal, grid_x, right)
+      end
 
     grid_x = grid_x + x_pad_left
     grid_w = max(grid_w - x_pad_left - x_pad_right, 10)
@@ -186,6 +194,7 @@ defmodule EexCharts.Layout do
       y_axes: y_axes,
       x_scale: x_scale,
       x_type: if(x_scale, do: x_scale.type, else: :category),
+      value_labels: value_labels,
       legend: legend,
       title_h: title_h
     }
@@ -330,6 +339,45 @@ defmodule EexCharts.Layout do
     ticks = TimeScale.ticks(x_min, x_max, grid_w)
     labels = Enum.map(ticks, fn t -> %{value: t.value, label: t.label} end)
     %{type: :datetime, ticks: labels, nice_min: x_min, nice_max: x_max}
+  end
+
+  # The horizontal value axis of a timeline: the data range as is (no nice
+  # rounding, as ApexCharts' timeline), datetime ticks from `TimeScale`, and
+  # their labels kept alongside since a `Scale` holds bare tick values.
+  # `xaxis.min` / `xaxis.max` bound it like a datetime x-axis.
+  defp time_value_scale(cfg, {mn, mx}, grid_w, [_primary | rest]) do
+    mn = time_bound(cfg.xaxis.min) || mn || 0
+    mx = time_bound(cfg.xaxis.max) || mx || mn
+    mx = if mx > mn, do: mx, else: mn + 86_400_000
+
+    ticks = TimeScale.ticks(mn, mx, grid_w)
+    scale = %Scale{ticks: Enum.map(ticks, & &1.value), nice_min: mn, nice_max: mx}
+    {[scale | rest], Enum.map(ticks, & &1.label)}
+  end
+
+  defp time_bound(nil), do: nil
+  defp time_bound(v), do: TimeScale.to_ms(v)
+
+  # The last time tick is centred on its value, which can sit close enough to
+  # the right edge for half its label to hang past it.
+  defp time_label_overhang(_cfg, %{ticks: []}, _labels, _grid_w), do: {0, 0}
+
+  defp time_label_overhang(cfg, scale, labels, grid_w) do
+    if cfg.xaxis.labels.show do
+      half =
+        LabelText.width(
+          List.last(labels),
+          cfg.xaxis.labels.style.font_size,
+          metrics(cfg, cfg.xaxis.labels.style)
+        ) / 2
+
+      room =
+        (scale.nice_max - List.last(scale.ticks)) / (scale.nice_max - scale.nice_min) * grid_w
+
+      {0, max(half - room - cfg.grid.padding.right, 0)}
+    else
+      {0, 0}
+    end
   end
 
   @doc """
@@ -616,14 +664,29 @@ defmodule EexCharts.Layout do
   def to_x(v, _type) when is_number(v), do: v
   def to_x(v, _type), do: TimeScale.to_ms(v)
 
-  @doc "The effective x-axis kind for a config: `:category`, `:numeric` or `:datetime`."
+  @doc """
+  The effective x-axis kind for a config: `:category`, `:numeric` or
+  `:datetime`.
+
+  Horizontal bars and range bars keep their categories on the (vertical) x
+  axis whatever `xaxis.type` says: as in ApexCharts, `xaxis.type: :datetime`
+  on a horizontal chart describes the value axis (a timeline), see
+  `horizontal?/1`.
+  """
   def x_type(cfg) do
     cond do
+      horizontal?(cfg) -> :category
       cfg.xaxis.type == :datetime -> :datetime
       cfg.xaxis.type == :numeric -> :numeric
       cfg.chart.type in [:scatter, :bubble] -> :numeric
       true -> :category
     end
+  end
+
+  @doc "True for horizontal bar and range bar charts (`plot_options.bar.horizontal`)."
+  def horizontal?(cfg) do
+    get_in(cfg, [:plot_options, :bar, :horizontal]) == true &&
+      cfg.chart.type in [:bar, :range_bar]
   end
 
   @doc "True when the x-axis is positioned by value rather than category slot."

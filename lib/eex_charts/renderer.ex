@@ -124,6 +124,7 @@ defmodule EexCharts.Renderer do
     names = Legend.names(cfg, Enum.map(all_series, & &1.name))
     n = series |> Enum.map(&length(&1.data)) |> Enum.max(fn -> 0 end)
     n = max(n, length(cfg.xaxis.categories))
+    n = if cfg.chart.type == :range_bar, do: Charts.RangeBar.row_count(cfg, series, n), else: n
     series = Stacking.annotate(cfg, series, n)
 
     base_range =
@@ -143,6 +144,9 @@ defmodule EexCharts.Renderer do
     x_range = if Layout.value_x?(cfg), do: x_value_range(cfg, series, n), else: nil
 
     l = Layout.build(cfg, names, n, y_ranges, x_range)
+
+    {cfg, l} =
+      Charts.RangeBar.fit_labels(cfg, series, l, &Layout.build(&1, names, n, y_ranges, x_range))
 
     categories =
       if cfg.chart.type == :histogram,
@@ -255,6 +259,7 @@ defmodule EexCharts.Renderer do
 
   defp prepare_series(%{chart: %{type: :violin}} = cfg, s), do: Charts.Violin.prepare(cfg, s)
   defp prepare_series(%{chart: %{type: :bar}} = cfg, s), do: {cfg, Charts.Bar.prepare(s)}
+  defp prepare_series(%{chart: %{type: :range_bar}} = cfg, s), do: Charts.RangeBar.prepare(cfg, s)
   defp prepare_series(cfg, series), do: {cfg, series}
 
   defp data_range(cfg, series) do
@@ -705,7 +710,9 @@ defmodule EexCharts.Renderer do
       color = axis_label_color(style.colors, cfg.chart.fore_color)
 
       labels =
-        Enum.map(l.scale.ticks, fn t ->
+        l.scale.ticks
+        |> Enum.with_index()
+        |> Enum.map(fn {t, i} ->
           el(
             "text",
             %{
@@ -716,7 +723,7 @@ defmodule EexCharts.Renderer do
               font_size: style.font_size,
               font_weight: style.font_weight
             },
-            esc(Layout.format_y_label(cfg, axis, t))
+            esc(horizontal_value_label(cfg, l, axis, t, i))
           )
         end)
 
@@ -725,6 +732,13 @@ defmodule EexCharts.Renderer do
       []
     end
   end
+
+  # A timeline's value axis is a time scale: its labels come with the layout
+  # and, as on a datetime x-axis, the x-axis formatter gets them formatted.
+  defp horizontal_value_label(cfg, %Layout{value_labels: [_ | _] = labels}, _axis, _t, i),
+    do: LabelText.plain(format_x_label(cfg, Enum.at(labels, i), i))
+
+  defp horizontal_value_label(cfg, _l, axis, t, _i), do: Layout.format_y_label(cfg, axis, t)
 
   @doc false
   # Value x-axis labels for charts that own their SVG assembly (heatmap).
@@ -941,12 +955,18 @@ defmodule EexCharts.Renderer do
       case cfg.chart.type do
         :bar -> bar_data_labels(cfg, series, l)
         :waterfall -> Charts.Waterfall.data_labels(cfg, series, l)
+        :range_bar -> range_bar_data_labels(cfg, series, l)
         _ -> point_data_labels(cfg, series, l)
       end
     else
       []
     end
   end
+
+  defp range_bar_data_labels(%{plot_options: %{bar: %{is_dumbbell: true}}} = cfg, series, l),
+    do: point_data_labels(cfg, series, l)
+
+  defp range_bar_data_labels(cfg, series, l), do: Charts.RangeBar.data_labels(cfg, series, l)
 
   defp bar_data_labels(cfg, series, l) do
     dl = cfg.data_labels
@@ -1263,6 +1283,9 @@ defmodule EexCharts.Renderer do
               v = Enum.at(s.data, j)
 
               cond do
+                cfg.chart.type == :range_bar and not cfg.plot_options.bar.is_dumbbell ->
+                  Charts.RangeBar.tooltip_rows(cfg, s, j)
+
                 v == nil ->
                   []
 
