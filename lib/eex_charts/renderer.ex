@@ -14,6 +14,7 @@ defmodule EexCharts.Renderer do
   @standalone_types %{
     radial_bar: Charts.RadialBar,
     gauge: Charts.Gauge,
+    level_meter: Charts.LevelMeter,
     radar: Charts.Radar,
     heatmap: Charts.Heatmap,
     treemap: Charts.Treemap,

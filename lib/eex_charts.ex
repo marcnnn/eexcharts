@@ -118,6 +118,7 @@ defmodule EexCharts do
       :dumbbell,
       :streamgraph,
       :gauge,
+      :level_meter,
       :unit,
       :waffle
     ],

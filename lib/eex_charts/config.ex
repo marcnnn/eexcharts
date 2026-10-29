@@ -394,6 +394,33 @@ defmodule EexCharts.Config do
           labels: %{orientation: :auto, padding: 4},
           total: %{show: true, label: "Total", formatter: nil}
         },
+        level_meter: %{
+          layout: :auto,
+          segments: 5,
+          segment_width: nil,
+          segment_height: nil,
+          row_height: 44,
+          gap: 3,
+          radius: 2,
+          track: %{show: true, color: "#f2f2f2"},
+          distributed: false,
+          target: nil,
+          below_target_color: "#FEB019",
+          target_gap: 4,
+          gained_color: nil,
+          gained_opacity: 0.45,
+          lost: %{show: true, dash: "2 2", width: 1.5},
+          show_value: true,
+          value_label: %{
+            font_size: 12,
+            font_weight: 400,
+            color: nil,
+            formatter: nil,
+            show_previous: true
+          },
+          row_labels: %{show: true, font_size: 13, font_weight: 400, color: nil},
+          column_labels: %{show: true, font_size: 13, font_weight: 600, color: nil}
+        },
         unit: %{
           layout: :grid,
           per_unit: 1,
@@ -689,6 +716,16 @@ defmodule EexCharts.Config do
       tooltip: %{enabled: false},
       legend: %{show: false},
       grid: %{show: false}
+    }
+  end
+
+  defp type_defaults(:level_meter) do
+    %{
+      data_labels: %{enabled: false},
+      fill: %{opacity: 1},
+      legend: %{show: false},
+      grid: %{show: false},
+      tooltip: %{shared: false, intersect: true}
     }
   end
 

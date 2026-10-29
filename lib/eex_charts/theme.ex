@@ -73,6 +73,7 @@ defmodule EexCharts.Theme do
   # between adjacent marks and marker rings are cut out of it.
   @daisy_surface "var(--color-base-100, #fff)"
   @daisy_track "var(--color-base-200, #f2f2f2)"
+  @daisy_warning "var(--color-warning, #FEB019)"
   @daisy_border "var(--color-base-300, #e0e0e0)"
   @daisy_border_soft "var(--color-base-300, #e8e8e8)"
 
@@ -93,7 +94,8 @@ defmodule EexCharts.Theme do
   Under `mode: :daisy` the following are mapped to daisyUI variables: the
   series palette, on-mark data label colors, `chart.fore_color`, the grid and
   x-axis border/tick colors, the white separator between adjacent marks, marker
-  stroke rings, the radial-bar track, the radar/polar-area rings and spokes,
+  stroke rings, the radial-bar and level-meter tracks, the level meter's
+  below-target colour, the radar/polar-area rings and spokes,
   and the tooltip. Setting `theme.palette` keeps daisyUI chrome but restores an
   ApexCharts palette for the series.
   """
@@ -117,6 +119,7 @@ defmodule EexCharts.Theme do
     |> put_fore_color(opts)
     |> put_tooltip_theme(opts)
     |> put_gauge_track(opts)
+    |> put_level_meter_track(opts)
   end
 
   # ApexCharts' light #f2f2f2 track glares on a dark chart. The gauge is not
@@ -127,6 +130,15 @@ defmodule EexCharts.Theme do
       cfg
     else
       put_in(cfg, [:plot_options, :gauge, :track, :background], "#4b4f52")
+    end
+  end
+
+  # Same for the level meter's empty segments (an EexCharts type too).
+  defp put_level_meter_track(cfg, opts) do
+    if get_in(opts, [:plot_options, :level_meter, :track, :color]) do
+      cfg
+    else
+      put_in(cfg, [:plot_options, :level_meter, :track, :color], "#4b4f52")
     end
   end
 
@@ -167,6 +179,12 @@ defmodule EexCharts.Theme do
     |> put_unless_set([:xaxis, :axis_ticks, :color], @daisy_border, opts)
     |> put_unless_set([:markers, :stroke_colors], @daisy_surface, opts)
     |> put_unless_set([:plot_options, :radial_bar, :track, :background], @daisy_track, opts)
+    |> put_unless_set([:plot_options, :level_meter, :track, :color], @daisy_track, opts)
+    |> put_unless_set(
+      [:plot_options, :level_meter, :below_target_color],
+      @daisy_warning,
+      opts
+    )
     |> put_unless_set(
       [:plot_options, :radar, :polygons, :stroke_colors],
       @daisy_border_soft,
