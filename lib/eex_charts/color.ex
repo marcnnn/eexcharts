@@ -53,6 +53,46 @@ defmodule EexCharts.Color do
     if resolved == value, do: value, else: resolve_vars(resolved)
   end
 
+  @doc """
+  Returns `fg`, unless it is practically invisible on `bg` (WCAG contrast
+  below `floor`, default 1.5:1), in which case white or dark grey is
+  returned, whichever reads better on `bg`.
+
+  ApexCharts pairs some defaults that vanish in its own dark theme: white
+  data-label text on palette4's light green, and `foreColor` annotation text
+  on the white label box. This only steps in for those near-invisible pairs,
+  so every legible default keeps its ApexCharts colour. Colours we cannot
+  inspect (`var(…)`, named colours) are returned unchanged.
+  """
+  def legible(fg, bg, floor \\ 1.5)
+
+  def legible("#" <> _ = fg, "#" <> _ = bg, floor) do
+    if contrast(fg, bg) >= floor do
+      fg
+    else
+      Enum.max_by(["#ffffff", "#373d3f"], &contrast(&1, bg))
+    end
+  end
+
+  def legible(fg, _bg, _floor), do: fg
+
+  @doc "WCAG 2 contrast ratio between two hex colours (1.0 - 21.0)."
+  def contrast(a, b) do
+    {hi, lo} = [luminance(a), luminance(b)] |> Enum.min_max() |> then(fn {l, h} -> {h, l} end)
+    (hi + 0.05) / (lo + 0.05)
+  end
+
+  defp luminance(hex) do
+    {r, g, b} = parse(hex)
+
+    [r, g, b]
+    |> Enum.map(fn c ->
+      c = c / 255
+      if c <= 0.03928, do: c / 12.92, else: :math.pow((c + 0.055) / 1.055, 2.4)
+    end)
+    |> then(fn [r, g, b] -> 0.2126 * r + 0.7152 * g + 0.0722 * b end)
+  end
+
   @doc "Parses `#rgb` or `#rrggbb` into `{r, g, b}`."
   def parse("#" <> hex) when byte_size(hex) == 3 do
     <<r::binary-1, g::binary-1, b::binary-1>> = hex

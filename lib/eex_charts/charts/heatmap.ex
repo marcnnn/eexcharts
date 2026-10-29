@@ -11,6 +11,16 @@ defmodule EexCharts.Charts.Heatmap do
   `plot_options.heatmap.color_scale.ranges` are given — the color of the
   matching range.
 
+  With `xaxis.type: :numeric` or `:datetime` the x-axis is continuous: data
+  points are `%{x:, y:}` / `[x, y]` (or plain numbers with x values in
+  `xaxis.categories`), each cell is placed by its x value on a linear scale
+  and sized from the spacing of the data, and missing x values leave gaps.
+  See `EexCharts.Charts.Heatmap.XLayout` for the width rule.
+
+  Without colour ranges, `legend: %{gradient: true}` replaces the series
+  legend with a continuous colour bar (bottom by default, `:top` or a
+  vertical `:right` bar); see `EexCharts.Charts.Heatmap.GradientLegend`.
+
   As in ApexCharts, the first series (index 0) is drawn at the **bottom** of
   the grid. Owns its full SVG assembly: `render_chart/3` returns the complete
   container (svg + tooltips).
@@ -19,6 +29,7 @@ defmodule EexCharts.Charts.Heatmap do
   import EexCharts.SVG
 
   alias EexCharts.{Color, Config, Layout, Legend, Renderer}
+  alias EexCharts.Charts.Heatmap.{GradientLegend, XLayout}
 
   @doc "Renders the complete heatmap container."
   def render_chart(cfg, params, id) do
@@ -29,11 +40,32 @@ defmodule EexCharts.Charts.Heatmap do
     names = Enum.map(all_series, & &1.name)
     n_vis = length(series)
 
+    value_x? = XLayout.value_axis?(cfg)
+
+    # Value x-axis: every series resolved to `{x, y}` points; the distinct x
+    # values across all series (hidden ones too) become the columns.
+    points =
+      if value_x?, do: Map.new(all_series, &{&1.index, XLayout.points(cfg, &1.data)}), else: %{}
+
+    xs =
+      points
+      |> Map.values()
+      |> Enum.concat()
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    x_step = XLayout.step(xs, cfg.xaxis.type)
+
     n_cats =
-      series
-      |> Enum.map(&length(&1.data))
-      |> Enum.max(fn -> 0 end)
-      |> max(length(cfg.xaxis.categories))
+      if value_x? do
+        length(xs)
+      else
+        series
+        |> Enum.map(&length(&1.data))
+        |> Enum.max(fn -> 0 end)
+        |> max(length(cfg.xaxis.categories))
+      end
 
     categories = Renderer.categories(cfg, n_cats)
     ranges = normalize_ranges(get_in(cfg, [:plot_options, :heatmap, :color_scale, :ranges]))
@@ -41,7 +73,12 @@ defmodule EexCharts.Charts.Heatmap do
     # ApexCharts normalizes heatmap shade intensity against the GLOBAL value
     # range (w.globals.minY/maxY), not per-series, and treats the chart as
     # "negative" if ANY value is < 0 or any configured range starts at <= 0.
-    all_values = series |> Enum.flat_map(& &1.data) |> Enum.filter(&is_number/1)
+    all_values =
+      if value_x? do
+        Enum.flat_map(series, fn s -> Enum.map(points[s.index], &elem(&1, 1)) end)
+      else
+        series |> Enum.flat_map(& &1.data) |> Enum.filter(&is_number/1)
+      end
 
     {g_min, g_max} =
       case all_values do
@@ -63,13 +100,21 @@ defmodule EexCharts.Charts.Heatmap do
 
     # Legend: one item per range when ranges are configured, otherwise one per
     # series (rendered through the shared Legend module so hiding works).
+    gradient = if n_vis > 0, do: GradientLegend.options(cfg, ranges)
+    {g_top, g_bottom, g_right} = GradientLegend.reserve(gradient, cfg, ctx)
+
     {legend, legend_h, legend_pos} =
-      if ranges != [] do
-        lh = if cfg.legend.show, do: cfg.legend.font_size + 16, else: 0
-        {nil, lh, cfg.legend.position}
-      else
-        lg = Legend.measure(cfg, names, w, h)
-        {lg, lg.h, lg.position}
+      cond do
+        gradient != nil ->
+          {nil, 0, :none}
+
+        ranges != [] ->
+          lh = if cfg.legend.show, do: cfg.legend.font_size + 16, else: 0
+          {nil, lh, cfg.legend.position}
+
+        true ->
+          lg = Legend.measure(cfg, names, w, h)
+          {lg, lg.h, lg.position}
       end
 
     y_font = cfg.yaxis.labels.style.font_size
@@ -83,11 +128,12 @@ defmodule EexCharts.Charts.Heatmap do
         0
       end
 
-    x_label_h = if cfg.xaxis.labels.show, do: x_font + 12, else: 4
+    x_tick_h = if value_x? and cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
+    x_label_h = if cfg.xaxis.labels.show, do: x_font + 12 + x_tick_h, else: 4 + x_tick_h
 
-    top_legend_h = if legend_pos == :top, do: legend_h, else: 0
-    bottom_legend_h = if legend_pos == :bottom, do: legend_h, else: 0
-    right_legend_w = if legend_pos == :right, do: (legend && legend.w) || 0, else: 0
+    top_legend_h = if(legend_pos == :top, do: legend_h, else: 0) + g_top
+    bottom_legend_h = if(legend_pos == :bottom, do: legend_h, else: 0) + g_bottom
+    right_legend_w = if(legend_pos == :right, do: (legend && legend.w) || 0, else: 0) + g_right
 
     grid_x = pad.left + left_w + if(left_w > 0, do: 10, else: 0)
     grid_y = title_h + top_legend_h + pad.top + 6
@@ -104,6 +150,43 @@ defmodule EexCharts.Charts.Heatmap do
       legend: legend,
       title_h: 0
     }
+
+    l =
+      if value_x? do
+        domain = XLayout.domain(cfg, XLayout.extents(xs, x_step))
+        %{l | x_scale: XLayout.x_scale(cfg, domain, grid_w), x_type: cfg.xaxis.type}
+      else
+        l
+      end
+
+    cells =
+      if value_x? do
+        value_cells(cfg, series, points, xs, x_step, l, ranges, ctx)
+      else
+        category_cells(cfg, series, categories, n_cats, l, ranges, ctx)
+      end
+
+    svg =
+      Renderer.svg_open(cfg, l, id, [
+        Renderer.background(cfg, l),
+        Renderer.title(cfg, l),
+        cell_rects(cfg, cells, params),
+        data_labels(cfg, cells),
+        series_labels(cfg, series, l, n_vis),
+        if(value_x?,
+          do: value_x_labels(cfg, l),
+          else: category_labels(cfg, categories, l, n_cats)
+        ),
+        legend_io(cfg, l, legend, ranges, legend_pos, legend_h, hidden, params),
+        gradient_legend(gradient, cfg, l, id, series, ctx)
+      ])
+
+    Renderer.container(cfg, params, id, svg, tooltips(cfg, cells))
+  end
+
+  defp category_cells(cfg, series, categories, n_cats, l, ranges, ctx) do
+    %Layout{grid_x: grid_x, grid_y: grid_y, grid_w: grid_w, grid_h: grid_h} = l
+    n_vis = length(series)
 
     cells =
       if n_vis > 0 and n_cats > 0 do
@@ -140,18 +223,48 @@ defmodule EexCharts.Charts.Heatmap do
         []
       end
 
-    svg =
-      Renderer.svg_open(cfg, l, id, [
-        Renderer.background(cfg, l),
-        Renderer.title(cfg, l),
-        cell_rects(cfg, cells, params),
-        data_labels(cfg, cells),
-        series_labels(cfg, series, l, n_vis),
-        category_labels(cfg, categories, l, n_cats),
-        legend_io(cfg, l, legend, ranges, legend_pos, legend_h, hidden, params)
-      ])
+    cells
+  end
 
-    Renderer.container(cfg, params, id, svg, tooltips(cfg, cells))
+  # Value x-axis: each cell spans its `XLayout.extents/2` interval, clipped
+  # to the axis domain; `j` is the column's index among the distinct x values.
+  defp value_cells(_cfg, [], _points, _xs, _step, _l, _ranges, _ctx), do: []
+
+  defp value_cells(cfg, series, points, xs, step, l, ranges, ctx) do
+    n_vis = length(series)
+    y_div = l.grid_h / n_vis
+    extents = XLayout.extents(xs, step)
+    col = xs |> Enum.with_index() |> Map.new()
+    %{nice_min: lo, nice_max: hi} = l.x_scale
+
+    series
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {s, p} ->
+      y = l.grid_y + (n_vis - 1 - p) * y_div
+      {color_fn, fore_fn} = cell_color_fns(cfg, s, ranges, ctx)
+
+      for {x, v} <- points[s.index],
+          {left, right} = extents[x],
+          left = max(left, lo),
+          right = min(right, hi),
+          right > left do
+        x0 = Layout.x_value_pos(l, left)
+
+        %{
+          series: s.index,
+          j: col[x],
+          x: x0,
+          y: y,
+          w: Layout.x_value_pos(l, right) - x0,
+          h: y_div,
+          value: v,
+          color: color_fn.(v),
+          fore: fore_fn.(v),
+          name: s.name,
+          category: XLayout.title(x, cfg.xaxis.type, step)
+        }
+      end
+    end)
   end
 
   # ── Cells ──────────────────────────────────────────────────────────────
@@ -265,8 +378,12 @@ defmodule EexCharts.Charts.Heatmap do
           el(
             "text",
             %{
-              x: c.x + c.w / 2 + cfg.data_labels.offset_x,
-              y: c.y + c.h / 2 + cfg.data_labels.offset_y,
+              x:
+                c.x + c.w / 2 +
+                  EexCharts.DataLabels.offset(cfg.data_labels.offset_x, c.value, c.series, c.j),
+              y:
+                c.y + c.h / 2 +
+                  EexCharts.DataLabels.offset(cfg.data_labels.offset_y, c.value, c.series, c.j),
               text_anchor: "middle",
               dominant_baseline: "central",
               fill: c.fore,
@@ -364,6 +481,34 @@ defmodule EexCharts.Charts.Heatmap do
     end
   end
 
+  # Value x-axis: the shared value-axis labels plus small tick marks at each
+  # labelled value, so the reader can see where a value falls inside a cell.
+  defp value_x_labels(cfg, l) do
+    ticks =
+      if cfg.xaxis.axis_ticks.show and cfg.xaxis.labels.show do
+        y0 = l.grid_y + l.grid_h
+
+        marks =
+          Enum.map(l.x_scale.ticks, fn %{value: v} ->
+            x = Layout.x_value_pos(l, v)
+
+            el("line", %{
+              x1: x,
+              x2: x,
+              y1: y0,
+              y2: y0 + cfg.xaxis.axis_ticks.height,
+              stroke: cfg.xaxis.axis_ticks.color
+            })
+          end)
+
+        el("g", %{class: "eexcharts-xaxis-ticks"}, marks)
+      else
+        []
+      end
+
+    [ticks, Renderer.value_x_axis_labels(cfg, l)]
+  end
+
   defp label_color(nil, fore), do: fore
   defp label_color([], fore), do: fore
   defp label_color([c | _], _fore), do: c
@@ -434,6 +579,13 @@ defmodule EexCharts.Charts.Heatmap do
   # Series legend via the shared module (colors by series index, hiding works).
   defp legend_io(cfg, l, legend, _ranges, _pos, _lh, hidden, params) do
     Legend.render(legend, cfg, l, hidden: hidden, on_click: params[:on_legend_click])
+  end
+
+  defp gradient_legend(nil, _cfg, _l, _id, _series, _ctx), do: []
+
+  defp gradient_legend(opts, cfg, l, id, [s | _], ctx) do
+    {color_fn, _fore_fn} = cell_color_fns(cfg, s, [], ctx)
+    GradientLegend.render(opts, cfg, l, id, ctx, color_fn)
   end
 
   # ── Tooltips ──────────────────────────────────────────────────────────────

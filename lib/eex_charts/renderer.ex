@@ -8,14 +8,18 @@ defmodule EexCharts.Renderer do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, LabelText, Layout, Legend}
+  alias EexCharts.{Charts, Config, DataLabels, LabelText, Layout, Legend, Stacking}
 
   # Circular / hierarchical types own their full SVG assembly.
   @standalone_types %{
     radial_bar: Charts.RadialBar,
+    gauge: Charts.Gauge,
     radar: Charts.Radar,
     heatmap: Charts.Heatmap,
-    treemap: Charts.Treemap
+    treemap: Charts.Treemap,
+    sunburst: Charts.Sunburst,
+    unit: Charts.Unit,
+    waffle: Charts.Unit
   }
 
   @doc """
@@ -29,10 +33,13 @@ defmodule EexCharts.Renderer do
   `:labels`, `:width`, `:height`, `:options`, `:on_click`, `:push_hover`,
   `:on_legend_click`, `:hidden_series`, `:class`.
   """
+  def render(%{options: %{trellis: %{}}} = params), do: EexCharts.Trellis.render(params)
+
   def render(params) do
     type = params[:type] || :line
     id = params[:id] || "eexcharts"
     params = if params[:static], do: staticize_params(params), else: params
+    {type, params} = Charts.BarFamily.resolve(type, params)
 
     opts =
       (params[:options] || %{})
@@ -40,7 +47,7 @@ defmodule EexCharts.Renderer do
       |> put_if(params[:height], [:chart, :height])
       |> put_if(params[:categories], [:xaxis, :categories])
 
-    cfg = Config.build(type, opts)
+    cfg = Config.build(type, opts) |> Charts.BarFamily.finalize(params)
     cfg = if params[:static], do: staticize_cfg(cfg), else: cfg
 
     cond do
@@ -71,7 +78,8 @@ defmodule EexCharts.Renderer do
     Map.drop(params, [:on_click, :push_hover, :on_legend_click])
   end
 
-  defp staticize_cfg(cfg) do
+  @doc false
+  def staticize_cfg(cfg) do
     cfg
     |> put_in([:tooltip, :enabled], false)
     |> resolve_cfg_vars()
@@ -105,15 +113,20 @@ defmodule EexCharts.Renderer do
   # ── Cartesian (line / area / bar) ────────────────────────────────────────
 
   defp render_cartesian(cfg, params, id) do
-    all_series = normalize_series(params[:series])
+    cfg = Stacking.prepare(cfg)
+    {cfg, all_series} = prepare_series(cfg, normalize_series(params[:series]))
     hidden = hidden_set(params)
     series = Enum.reject(all_series, &MapSet.member?(hidden, &1.index))
 
-    names = Enum.map(all_series, & &1.name)
+    names = Legend.names(cfg, Enum.map(all_series, & &1.name))
     n = series |> Enum.map(&length(&1.data)) |> Enum.max(fn -> 0 end)
     n = max(n, length(cfg.xaxis.categories))
+    series = Stacking.annotate(cfg, series, n)
 
-    {y_min, y_max} = data_range(cfg, series)
+    base_range =
+      if Stacking.enabled?(cfg), do: Stacking.data_range(series), else: data_range(cfg, series)
+
+    {y_min, y_max} = log_axis_range(cfg, hd(Config.yaxes(cfg)), series, base_range)
 
     y_axes = Config.yaxes(cfg)
 
@@ -128,9 +141,12 @@ defmodule EexCharts.Renderer do
 
     l = Layout.build(cfg, names, n, y_ranges, x_range)
 
-    categories = categories(cfg, n)
+    categories =
+      if cfg.chart.type == :histogram,
+        do: Charts.Histogram.bin_labels(all_series),
+        else: categories(cfg, n)
 
-    bar? = cfg.chart.type == :bar
+    bar? = cfg.chart.type in [:bar, :waterfall]
 
     series_io =
       case cfg.chart.type do
@@ -144,8 +160,17 @@ defmodule EexCharts.Renderer do
         :box_plot ->
           Charts.BoxPlot.render(cfg, series, l, on_click: params[:on_click])
 
+        :histogram ->
+          Charts.Histogram.render(cfg, series, l, on_click: params[:on_click])
+
+        :violin ->
+          Charts.Violin.render(cfg, series, l, on_click: params[:on_click])
+
         :range_bar ->
           Charts.RangeBar.render(cfg, series, l, on_click: params[:on_click])
+
+        :waterfall ->
+          Charts.Waterfall.render(cfg, series, l, on_click: params[:on_click])
 
         t when t in [:scatter, :bubble] ->
           Charts.Scatter.render(cfg, series, l, id, on_click: params[:on_click])
@@ -155,7 +180,7 @@ defmodule EexCharts.Renderer do
       end
 
     hover_markers =
-      if cfg.chart.type in [:line, :area] and !params[:static],
+      if cfg.chart.type in [:line, :area, :streamgraph] and !params[:static],
         do: Charts.Line.hover_markers(cfg, series, l),
         else: []
 
@@ -178,15 +203,17 @@ defmodule EexCharts.Renderer do
         EexCharts.Annotations.render(cfg, l),
         axes(cfg, l, categories),
         Legend.render(l.legend, cfg, l,
-          hidden: hidden,
-          on_click: params[:on_legend_click]
+          hidden: if(Legend.custom?(cfg), do: MapSet.new(), else: hidden),
+          on_click: if(Legend.custom?(cfg), do: nil, else: params[:on_legend_click])
         ),
         hover_markers,
         crosshair(cfg, l),
-        if(bar?, do: [], else: zones)
+        if(bar?, do: [], else: zones),
+        if(params[:static], do: [], else: EexCharts.Annotations.hover_targets(cfg, l))
       ])
 
-    container(cfg, params, id, svg, cartesian_tooltips(cfg, series, categories, n))
+    anno_tips = if params[:static], do: [], else: EexCharts.Annotations.tooltips(cfg)
+    container(cfg, params, id, svg, cartesian_tooltips(cfg, series, categories, n, anno_tips))
   end
 
   @doc """
@@ -205,7 +232,12 @@ defmodule EexCharts.Renderer do
       |> Enum.with_index()
       |> Enum.map(fn
         {%{} = s, i} ->
-          %{name: to_string(s[:name] || "series-#{i + 1}"), data: s[:data] || [], index: i}
+          %{
+            name: to_string(s[:name] || "series-#{i + 1}"),
+            data: s[:data] || [],
+            index: i,
+            group: s[:group]
+          }
 
         {other, i} ->
           %{name: "series-#{i + 1}", data: List.wrap(other), index: i}
@@ -213,11 +245,22 @@ defmodule EexCharts.Renderer do
     end
   end
 
+  # Statistical types turn raw observations into drawable points first.
+  defp prepare_series(%{chart: %{type: :histogram}} = cfg, s),
+    do: Charts.Histogram.prepare(cfg, s)
+
+  defp prepare_series(%{chart: %{type: :violin}} = cfg, s), do: Charts.Violin.prepare(cfg, s)
+  defp prepare_series(cfg, series), do: {cfg, series}
+
   defp data_range(cfg, series) do
     case cfg.chart.type do
       :candlestick -> Charts.Candlestick.data_range(series)
       :box_plot -> Charts.BoxPlot.data_range(series)
+      :histogram -> Charts.Histogram.data_range(series)
+      :violin -> Charts.Violin.data_range(series)
       :range_bar -> Charts.RangeBar.data_range(series)
+      :waterfall -> Charts.Waterfall.data_range(series)
+      :bar -> Charts.StackGroups.data_range(cfg, series) || numeric_data_range(cfg, series)
       t when t in [:scatter, :bubble] -> Charts.Scatter.data_range(series)
       _ -> numeric_data_range(cfg, series)
     end
@@ -233,12 +276,40 @@ defmodule EexCharts.Renderer do
             is_number(y),
             do: y
 
-      case ys do
-        [] -> {nil, nil}
-        _ -> Enum.min_max(ys)
-      end
+      range =
+        case ys do
+          [] -> {nil, nil}
+          _ -> Enum.min_max(ys)
+        end
+
+      log_axis_range(
+        cfg,
+        Enum.at(y_axes, ai),
+        Enum.filter(series, &(Layout.axis_index_for(y_axes, &1) == ai)),
+        range
+      )
     end)
   end
+
+  # A log axis cannot start at 0 (bars pin their baseline there). When the
+  # data dips below 1, start the axis at the smallest positive value so its
+  # sub-unit decades show (see `Scale.log_scale/4`); otherwise keep the
+  # range as it was.
+  defp log_axis_range(cfg, %{logarithmic: true}, series, {mn, mx})
+       when is_number(mn) and mn <= 0 do
+    positive_min =
+      for(
+        s <- series,
+        {_j, _x, y, _z} <- Layout.series_points(cfg, s.data),
+        is_number(y) and y > 0,
+        do: y
+      )
+      |> Enum.min(fn -> nil end)
+
+    if is_number(positive_min) and positive_min < 1, do: {positive_min, mx}, else: {mn, mx}
+  end
+
+  defp log_axis_range(_cfg, _axis, _series, range), do: range
 
   # Overall x-value range for numeric / datetime / scatter x-axes.
   defp x_value_range(cfg, series, n) do
@@ -618,10 +689,13 @@ defmodule EexCharts.Renderer do
     end
   end
 
+  # Horizontal bars swap the axes the way `Layout` sizes them: the bottom band
+  # (value labels) belongs to `xaxis.labels`, the left gutter (category
+  # labels) to `yaxis.labels`.
   defp horizontal_value_labels(cfg, l) do
     axis = hd(l.y_axes)
 
-    if axis.show and axis.labels.show do
+    if axis.show and cfg.xaxis.labels.show do
       style = axis.labels.style
       color = axis_label_color(style.colors, cfg.chart.fore_color)
 
@@ -646,6 +720,10 @@ defmodule EexCharts.Renderer do
       []
     end
   end
+
+  @doc false
+  # Value x-axis labels for charts that own their SVG assembly (heatmap).
+  def value_x_axis_labels(cfg, %Layout{} = l), do: category_axis_labels(cfg, l, [])
 
   # Value x-axis (numeric / datetime): labels sit at scale-tick positions,
   # placed by x value rather than category slot.
@@ -681,7 +759,7 @@ defmodule EexCharts.Renderer do
 
   # Category labels: bottom for vertical charts, left for horizontal bars.
   defp category_axis_labels(cfg, l, categories) do
-    if cfg.xaxis.labels.show do
+    if if(l.horizontal, do: hd(l.y_axes).labels.show, else: cfg.xaxis.labels.show) do
       style = cfg.xaxis.labels.style
       color = axis_label_color(style.colors, cfg.chart.fore_color)
       tick_h = if cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
@@ -697,7 +775,8 @@ defmodule EexCharts.Renderer do
       # every label regardless.
       step =
         cond do
-          l.horizontal or l.n <= 1 -> 1
+          l.n <= 1 -> 1
+          l.horizontal -> horizontal_category_step(cfg, l, categories, style)
           not cfg.xaxis.labels.hide_overlapping_labels -> 1
           (cfg.xaxis.labels.rotate || 0) != 0 -> 1
           true -> max(1, ceil(l.n * (max_label_w + 10) / l.grid_w))
@@ -740,6 +819,25 @@ defmodule EexCharts.Renderer do
       el("g", %{class: "eexcharts-xaxis-labels"}, labels)
     else
       []
+    end
+  end
+
+  # Horizontal bars stack their category labels down the left gutter. When
+  # the slots are shorter than a label is tall, keep every k-th label (k the
+  # smallest step that leaves each kept label a full line plus a 2px gap) so
+  # the survivors stay evenly spaced instead of piling into each other.
+  defp horizontal_category_step(cfg, l, categories, style) do
+    if cfg.xaxis.labels.hide_overlapping_labels do
+      lines =
+        categories
+        |> Enum.with_index()
+        |> Enum.map(fn {c, i} -> LabelText.line_count(format_x_label(cfg, c, i)) end)
+        |> Enum.max(fn -> 1 end)
+
+      need = lines * Layout.text_height(style.font_size) + 2
+      max(1, ceil(need / (l.grid_h / l.n) - 1.0e-9))
+    else
+      1
     end
   end
 
@@ -837,6 +935,7 @@ defmodule EexCharts.Renderer do
     if cfg.data_labels.enabled do
       case cfg.chart.type do
         :bar -> bar_data_labels(cfg, series, l)
+        :waterfall -> Charts.Waterfall.data_labels(cfg, series, l)
         _ -> point_data_labels(cfg, series, l)
       end
     else
@@ -860,23 +959,38 @@ defmodule EexCharts.Renderer do
             true -> bar_label_pos(position, r, dl)
           end
 
-        el(
-          "text",
-          %{
-            x: x + dl.offset_x,
-            y: y + dl.offset_y,
-            text_anchor: "middle",
-            dominant_baseline: "central",
-            fill: data_label_color(dl, r.series, r.color),
-            font_size: dl.style.font_size,
-            font_weight: dl.style.font_weight,
-            class: "eexcharts-datalabel"
-          },
-          esc(format_data_label(cfg, r.value))
-        )
+        x = x + DataLabels.offset(dl.offset_x, r.value, r.series, r.index)
+        y = y + DataLabels.offset(dl.offset_y, r.value, r.series, r.index)
+        text = format_data_label(cfg, r.value)
+        box = DataLabels.box(x, y, text, dl.style.font_size, Layout.metrics(cfg, dl.style))
+
+        node =
+          el(
+            "text",
+            %{
+              x: x,
+              y: y,
+              text_anchor: "middle",
+              dominant_baseline: "central",
+              fill: data_label_color(dl, r.series, r.color),
+              font_size: dl.style.font_size,
+              font_weight: dl.style.font_weight,
+              class: "eexcharts-datalabel"
+            },
+            esc(text)
+          )
+
+        {r.series, box, node}
       end)
 
-    el("g", %{class: "eexcharts-datalabels"}, labels)
+    el("g", %{class: "eexcharts-datalabels"}, visible_labels(dl, labels))
+  end
+
+  # `{series, box, node}` triples -> the nodes left after optional balanced
+  # overlap hiding (`data_labels.hide_overlapping`).
+  defp visible_labels(dl, labels) do
+    labels = if dl.hide_overlapping, do: DataLabels.hide_overlapping(labels), else: labels
+    Enum.map(labels, fn {_s, _box, node} -> node end)
   end
 
   # For a vertical bar the position names an edge of the rect, not the end the
@@ -896,7 +1010,11 @@ defmodule EexCharts.Renderer do
 
         s.data
         |> Enum.with_index()
-        |> point_label_positions(cfg, l, dl)
+        |> point_label_positions(cfg, l, dl, i)
+        |> Enum.map(fn
+          {v, j, x, _y} when is_map_key(s, :stack) -> {v, j, x, Stacking.label_y(s, l, j, v, dl)}
+          point -> point
+        end)
         |> Enum.map(fn {v, j, x, y} ->
           text = format_data_label(cfg, v, i, j)
 
@@ -929,45 +1047,66 @@ defmodule EexCharts.Renderer do
 
           text_color =
             if dl.background.enabled,
-              do: dl.background.fore_color,
+              do: EexCharts.Color.legible(dl.background.fore_color, color),
               else: data_label_color(dl, i, color)
 
-          [
-            pill,
-            el(
-              "text",
-              %{
-                x: x,
-                y: y,
-                text_anchor: "middle",
-                dominant_baseline: "central",
-                fill: text_color,
-                font_family: dl.style.font_family,
-                font_size: fs,
-                font_weight: dl.style.font_weight,
-                class: "eexcharts-datalabel"
-              },
-              esc(text)
-            )
-          ]
+          box =
+            if dl.background.enabled do
+              pad_v = dl.background.padding_y || dl.background.padding / 2
+
+              DataLabels.box(
+                x,
+                y + dl.background.offset_y,
+                text,
+                fs,
+                Layout.metrics(cfg, dl.style),
+                dl.background.padding,
+                pad_v / 2
+              )
+            else
+              DataLabels.box(x, y, text, fs, Layout.metrics(cfg, dl.style))
+            end
+
+          {i, box,
+           [
+             pill,
+             el(
+               "text",
+               %{
+                 x: x,
+                 y: y,
+                 text_anchor: "middle",
+                 dominant_baseline: "central",
+                 fill: text_color,
+                 font_family: dl.style.font_family,
+                 font_size: fs,
+                 font_weight: dl.style.font_weight,
+                 class: "eexcharts-datalabel"
+               },
+               esc(text)
+             )
+           ]}
         end)
       end)
 
-    el("g", %{class: "eexcharts-datalabels"}, labels)
+    el("g", %{class: "eexcharts-datalabels"}, visible_labels(dl, labels))
   end
 
   # Positions for one series' point labels. Category charts place labels above
   # the category slot; value x-axes (scatter/bubble) place them at the point,
   # nudged by `stroke_width` the way ApexCharts' `drawDataLabel` does.
-  defp point_label_positions(indexed_data, cfg, l, dl) do
+  defp point_label_positions(indexed_data, cfg, l, dl, i) do
+    off_x = fn v, j -> DataLabels.offset(dl.offset_x, v, i, j) end
+    off_y = fn v, j -> DataLabels.offset(dl.offset_y, v, i, j) end
+
     if Layout.value_x?(cfg) do
       indexed_data
       |> Enum.map(fn {v, j} ->
         {x, y, _z} = Layout.point(v, j, Layout.x_type(cfg))
 
         if is_number(x) and is_number(y) do
-          {v, j, Layout.x_value_pos(l, x) + dl.offset_x,
-           Layout.y_for(l, y) + dl.offset_y + dl.stroke_width}
+          {v, j, Layout.x_value_pos(l, x) + off_x.(v, j),
+           Layout.y_for(l, y) + off_y.(v, j) + dl.stroke_width}
         end
       end)
       |> Enum.reject(&is_nil/1)
@@ -975,7 +1114,7 @@ defmodule EexCharts.Renderer do
       indexed_data
       |> Enum.filter(fn {v, _j} -> is_number(v) end)
       |> Enum.map(fn {v, j} ->
-        {v, j, Layout.category_pos(l, j) + dl.offset_x, Layout.y_for(l, v) - 10 + dl.offset_y}
+        {v, j, Layout.category_pos(l, j) + off_x.(v, j), Layout.y_for(l, v) - 10 + off_y.(v, j)}
       end)
     end
   end
@@ -1100,7 +1239,9 @@ defmodule EexCharts.Renderer do
     end
   end
 
-  defp cartesian_tooltips(cfg, series, categories, n) do
+  # `anno_tips`: point-annotation tooltips; they show even when the series
+  # tooltip is off.
+  defp cartesian_tooltips(cfg, series, categories, n, anno_tips) do
     if cfg.tooltip.enabled and n > 0 do
       tips =
         Enum.map(0..(n - 1), fn j ->
@@ -1111,10 +1252,19 @@ defmodule EexCharts.Renderer do
             Enum.map(series, fn s ->
               v = Enum.at(s.data, j)
 
-              if v == nil do
-                []
-              else
-                tooltip_row(Config.color_at(cfg, s.index), s.name, tooltip_value(cfg, v))
+              cond do
+                v == nil ->
+                  []
+
+                cfg.chart.type == :waterfall ->
+                  Charts.Waterfall.tooltip_rows(cfg, s, v)
+
+                true ->
+                  tooltip_row(
+                    Config.color_at(cfg, s.index),
+                    s.name,
+                    Stacking.tooltip_value(s, j, tooltip_value(cfg, v))
+                  )
               end
             end)
 
@@ -1124,9 +1274,9 @@ defmodule EexCharts.Renderer do
           ])
         end)
 
-      tooltip_container(cfg, tips)
+      tooltip_container(cfg, tips ++ anno_tips)
     else
-      []
+      if anno_tips == [], do: [], else: tooltip_container(cfg, anno_tips)
     end
   end
 
@@ -1167,6 +1317,7 @@ defmodule EexCharts.Renderer do
     case cfg.chart.type do
       :candlestick -> Charts.Candlestick.tooltip_value(cfg, v)
       :box_plot -> Charts.BoxPlot.tooltip_value(cfg, v)
+      :violin -> Charts.Violin.tooltip_value(cfg, v)
       :range_bar -> Charts.RangeBar.tooltip_value(cfg, v)
       t when t in [:scatter, :bubble] -> Charts.Scatter.tooltip_value(cfg, v)
       _ -> format_tooltip_y(cfg, point_y(v))

@@ -194,20 +194,30 @@ defmodule EexCharts.Scale do
   space between `y_min` and `y_max` (`logarithmicScale`).
 
   ApexCharts falls back to a linear `nice_scale/3` when the range is `<= 5`
-  (`invalidLogScale`); this mirrors that.
+  (`invalidLogScale`); this mirrors that, except for sub-unit data.
+
+  ## Values below 1
+
+  When the smallest value is positive and below 1 (say 0.003), the axis stays
+  logarithmic whatever the range, and its ticks are the whole powers of
+  `base` bracketing the data (`0.001, 0.01, 0.1, 1, ...`), so values under
+  the base get their own decades instead of being pushed up to 1. Spacing
+  sub-unit ticks evenly in log space would give unreadable values like
+  0.0447, hence the snap to powers in both nice and plain mode.
   """
   @spec log_scale(number, number, number, boolean) :: t
   def log_scale(y_min, y_max, base \\ 10, force_nice \\ false) do
     range = abs((y_max || 0) - (y_min || 0))
+    sub_unit? = is_number(y_min) and is_number(y_max) and y_min > 0 and y_min < 1
 
-    if not is_number(y_min) or not is_number(y_max) or range <= 5 do
+    if not sub_unit? and (not is_number(y_min) or not is_number(y_max) or range <= 5) do
       nice_scale(y_min, y_max, [])
     else
       {ticks, nmin, nmax} =
-        if force_nice do
-          log_scale_nice(y_min, y_max, base)
-        else
-          log_scale_plain(y_min, y_max, base)
+        cond do
+          sub_unit? -> log_scale_decades(y_min, max(y_max, y_min), base)
+          force_nice -> log_scale_nice(y_min, y_max, base)
+          true -> log_scale_plain(y_min, y_max, base)
         end
 
       %__MODULE__{
@@ -238,6 +248,22 @@ defmodule EexCharts.Scale do
 
     {logs, y_min, y_max}
   end
+
+  # Whole powers of `base` from the one at or below `y_min` to the one at or
+  # above `y_max` (at least two ticks). The epsilon keeps 3.0000000004 from
+  # `:math.log(1000) / :math.log(10)` landing on the next decade.
+  defp log_scale_decades(y_min, y_max, base) do
+    lb = :math.log(base)
+    lo = floor(:math.log(y_min) / lb + 1.0e-9)
+    hi = max(ceil(:math.log(y_max) / lb - 1.0e-9), lo + 1)
+    logs = Enum.map(lo..hi, &power(base, &1))
+    {logs, List.first(logs), List.last(logs)}
+  end
+
+  # `:math.pow(10, -3)` is 0.0010000000000000002; dividing by the positive
+  # power instead keeps the tick values exact for decimal bases.
+  defp power(base, e) when e < 0, do: 1 / :math.pow(base, -e)
+  defp power(base, e), do: :math.pow(base, e)
 
   defp log_scale_nice(y_min, y_max, base) do
     y_max = if y_max <= 0, do: max(y_min, base), else: y_max

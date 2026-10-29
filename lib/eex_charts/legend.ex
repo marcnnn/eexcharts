@@ -19,6 +19,25 @@ defmodule EexCharts.Legend do
   defp marker_d(cfg), do: (cfg.legend.markers.size || 6) * 2
 
   @doc """
+  The legend entries: `legend.custom_legend_items` when set, otherwise the
+  series names.
+  """
+  def names(cfg, series_names) do
+    case cfg.legend[:custom_legend_items] do
+      [_ | _] = items -> Enum.map(items, &to_string/1)
+      _ -> series_names
+    end
+  end
+
+  @doc "Whether the legend lists custom items (which do not toggle series)."
+  def custom?(cfg), do: match?([_ | _], cfg.legend[:custom_legend_items])
+
+  # `legend.markers.fill_colors` overrides the palette per legend item.
+  defp marker_color(cfg, i) do
+    Config.color_for(cfg.legend.markers[:fill_colors], i) || Config.color_at(cfg, i)
+  end
+
+  @doc """
   Measures the legend box for the given series names within an SVG of
   `w` x `h`. Returns a `%Legend{}` with row layout for rendering.
   """
@@ -143,7 +162,7 @@ defmodule EexCharts.Legend do
                 do: Config.color_at(cfg, item.index),
                 else: fore
 
-            marker_color = Config.color_at(cfg, item.index)
+            marker_color = marker_color(cfg, item.index)
 
             stroke_w = cfg.legend.markers.stroke_width
             stroke_c = if stroke_w && stroke_w > 0, do: cfg.legend.markers.stroke_color
@@ -299,7 +318,7 @@ defmodule EexCharts.Legend do
     color =
       if cfg.legend.labels.use_series_colors, do: Config.color_at(cfg, item.index), else: fore
 
-    marker_color = Config.color_at(cfg, item.index)
+    marker_color = marker_color(cfg, item.index)
     stroke_w = cfg.legend.markers.stroke_width
     stroke_c = if stroke_w && stroke_w > 0, do: cfg.legend.markers.stroke_color
     hidden? = MapSet.member?(hidden, item.index)

@@ -8,6 +8,23 @@ defmodule EexCharts.Charts.RadialBar do
   become concentric rings. A hollow center (`hollow.size`% of the radius) hosts
   the center data labels.
 
+  ## Targets
+
+  A target is a short radial marker line across a ring at a target value
+  (same 0-100 scale as the series). Give them per series, either on the
+  series map or as an option list aligned with the series order:
+
+      series: [%{name: "Sales", data: [76], targets: [85]}]
+
+      options: %{plot_options: %{radial_bar: %{targets: [85, nil, [60, 90]]}}}
+
+  Each target is a number or `%{value: n, color: c, width: w}`; both sources
+  are combined. `plot_options.radial_bar.target` styles them: `color`
+  (default `nil` = `chart.fore_color`), `width` (stroke px, default `3`) and
+  `overhang` (px the marker reaches past each side of the ring, default `3`).
+  A target follows its ring when the ring is hidden via the legend, and the
+  tooltip lists it as a "Target" row.
+
   Owns its full SVG assembly: `render_chart/3` returns the complete container
   (svg + tooltips), like `EexCharts.Renderer.render/1` does for cartesian
   types.
@@ -19,7 +36,7 @@ defmodule EexCharts.Charts.RadialBar do
 
   @doc "Renders the complete radial bar chart container."
   def render_chart(cfg, params, id) do
-    all_rings = rings(params)
+    all_rings = params |> rings() |> attach_targets(cfg.plot_options.radial_bar.targets)
     hidden = Renderer.hidden_set(params)
     rings = Enum.reject(all_rings, &MapSet.member?(hidden, &1.index))
 
@@ -61,6 +78,7 @@ defmodule EexCharts.Charts.RadialBar do
         tracks(cfg, geo),
         hollow(cfg, geo),
         arcs(cfg, geo, rings, params),
+        targets(cfg, geo, rings),
         center_labels(cfg, geo, rings),
         Legend.render(legend, cfg, l,
           hidden: hidden,
@@ -148,6 +166,13 @@ defmodule EexCharts.Charts.RadialBar do
     end
   end
 
+  # Targets default to the fore colour, which in the dark theme is near-white
+  # and would vanish on ApexCharts' light #f2f2f2 track.
+  defp default_target_color(cfg, i) do
+    track = track_background(cfg.plot_options.radial_bar.track.background, i)
+    EexCharts.Color.legible(cfg.chart.fore_color, track || "#f2f2f2")
+  end
+
   defp track_background(bg, i) when is_list(bg), do: Enum.at(bg, rem(i, length(bg)))
   defp track_background(bg, _i), do: bg
 
@@ -192,6 +217,54 @@ defmodule EexCharts.Charts.RadialBar do
 
     el("g", %{class: "eexcharts-radialbar-series"}, arcs)
   end
+
+  # ── Targets ──────────────────────────────────────────────────────────────
+
+  # Radial line across ring `index` at the target's angle, centred on the ring
+  # and reaching `overhang` px past both sides of the band.
+  defp targets(cfg, geo, rings) do
+    style = cfg.plot_options.radial_bar.target
+
+    markers =
+      for r <- rings, t <- r.targets do
+        angle = geo.start_angle + geo.total_angle * clamp_pct(t.value) / 100
+        radius = geo.radius_at.(r.index)
+        half = geo.stroke_w / 2 + style.overhang
+        {x1, y1} = polar(geo.cx, geo.cy, max(radius - half, 0), angle)
+        {x2, y2} = polar(geo.cx, geo.cy, radius + half, angle)
+
+        el("line", %{
+          class: "eexcharts-radialbar-target",
+          data_j: r.index,
+          x1: x1,
+          y1: y1,
+          x2: x2,
+          y2: y2,
+          stroke: t[:color] || style.color || default_target_color(cfg, r.index),
+          stroke_width: t[:width] || style.width,
+          stroke_linecap: "round"
+        })
+      end
+
+    if markers == [], do: [], else: el("g", %{class: "eexcharts-radialbar-targets"}, markers)
+  end
+
+  defp clamp_pct(v), do: v |> max(0) |> min(100)
+
+  # Merges series-level `targets:` with the option list aligned by index;
+  # every target becomes `%{value: n}` plus optional `:color` / `:width`.
+  defp attach_targets(rings, option_targets) do
+    Enum.map(rings, fn r ->
+      from_opts = if is_list(option_targets), do: Enum.at(option_targets, r.index), else: nil
+      %{r | targets: normalize_targets(r.targets) ++ normalize_targets(from_opts)}
+    end)
+  end
+
+  defp normalize_targets(nil), do: []
+  defp normalize_targets(list) when is_list(list), do: Enum.flat_map(list, &normalize_targets/1)
+  defp normalize_targets(v) when is_number(v), do: [%{value: v}]
+  defp normalize_targets(%{value: v} = t) when is_number(v), do: [t]
+  defp normalize_targets(_), do: []
 
   # ── Hollow center ─────────────────────────────────────────────────────────────
 
@@ -320,7 +393,15 @@ defmodule EexCharts.Charts.RadialBar do
               Config.color_at(cfg, r.index),
               r.name,
               "#{fmt_value(r.value)}%"
-            )
+            ),
+            Enum.map(r.targets, fn t ->
+              Renderer.tooltip_row(
+                t[:color] || cfg.plot_options.radial_bar.target.color ||
+                  default_target_color(cfg, r.index),
+                "Target",
+                "#{fmt_value(t.value)}%"
+              )
+            end)
           ])
         end)
 
@@ -341,10 +422,10 @@ defmodule EexCharts.Charts.RadialBar do
     values =
       case params[:series] do
         [%{} | _] = list ->
-          Enum.map(list, fn s -> {s[:name], first_number(s[:data])} end)
+          Enum.map(list, fn s -> {s[:name], first_number(s[:data]), s[:targets]} end)
 
         list when is_list(list) ->
-          Enum.map(list, fn v -> {nil, if(is_number(v), do: v, else: 0)} end)
+          Enum.map(list, fn v -> {nil, if(is_number(v), do: v, else: 0), nil} end)
 
         _ ->
           []
@@ -352,9 +433,9 @@ defmodule EexCharts.Charts.RadialBar do
 
     values
     |> Enum.with_index()
-    |> Enum.map(fn {{name, value}, i} ->
+    |> Enum.map(fn {{name, value, targets}, i} ->
       label = label_at(labels, i) || name || "series-#{i + 1}"
-      %{name: to_string(label), value: value, index: i}
+      %{name: to_string(label), value: value, index: i, targets: targets}
     end)
   end
 

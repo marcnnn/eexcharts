@@ -57,7 +57,11 @@ defmodule EexCharts.Layout do
   def build(cfg, names, n, y_ranges, x_range) when is_list(y_ranges) do
     w = dim(cfg.chart.width, 600)
     h = dim(cfg.chart.height, 350)
-    horizontal = get_in(cfg, [:plot_options, :bar, :horizontal]) == true && cfg.chart.type == :bar
+
+    horizontal =
+      get_in(cfg, [:plot_options, :bar, :horizontal]) == true &&
+        cfg.chart.type in [:bar, :range_bar]
+
     pad = cfg.grid.padding
 
     title_h = if cfg.title.text, do: cfg.title.style.font_size + cfg.title.margin + 4, else: 0
@@ -155,7 +159,11 @@ defmodule EexCharts.Layout do
     # half of each overflows. ApexCharts reserves that overhang
     # (`additionalPaddingXLabels` → xPadLeft/xPadRight); without it the outer
     # labels are clipped by the SVG viewBox.
-    {x_pad_left, x_pad_right} = x_label_overhang(cfg, x_scale)
+    {x_pad_left, x_pad_right} =
+      if x_scale,
+        do: x_label_overhang(cfg, x_scale),
+        else: category_edge_overhang(cfg, n, horizontal, grid_x, right)
+
     grid_x = grid_x + x_pad_left
     grid_w = max(grid_w - x_pad_left - x_pad_right, 10)
 
@@ -237,8 +245,6 @@ defmodule EexCharts.Layout do
   # first label overhangs on the left too, but the y-axis gutter already
   # absorbs it, which is also what ApexCharts' `additionalPaddingXLabels` ends
   # up doing for a numeric axis with y labels.
-  defp x_label_overhang(_cfg, nil), do: {0, 0}
-
   defp x_label_overhang(cfg, %{ticks: ticks, type: type}) do
     if cfg.xaxis.labels.show and ticks != [] and (cfg.xaxis.labels.rotate || 0) == 0 do
       font = cfg.xaxis.labels.style.font_size
@@ -253,6 +259,32 @@ defmodule EexCharts.Layout do
       {0, 0}
     end
   end
+
+  # Line/area category axes (`tick_placement: :on`) put the first and last
+  # labels on the plot edges, so half of each hangs outside the plot. Reserve
+  # only what the existing gutter cannot absorb: a label that already fits
+  # moves nothing, a long last category ("2024" at 600px) no longer clips.
+  # Overhangs within the 2px error of the width estimate are left alone.
+  defp category_edge_overhang(cfg, n, horizontal, left_gutter, right_gutter) do
+    labels = cfg.xaxis.labels
+
+    if labels.show and n > 1 and not horizontal and (labels.rotate || 0) == 0 and
+         cfg.xaxis.tick_placement != :between and cfg.chart.type != :box_plot do
+      cats = cfg.xaxis.categories
+      first = if cats == [], do: "1", else: hd(cats)
+      last = if cats == [], do: Integer.to_string(n), else: Enum.at(cats, n - 1, List.last(cats))
+
+      half =
+        &(LabelText.width(to_string(&1), labels.style.font_size, metrics(cfg, labels.style)) / 2)
+
+      {edge_overflow(half.(first), left_gutter), edge_overflow(half.(last), right_gutter)}
+    else
+      {0, 0}
+    end
+  end
+
+  defp edge_overflow(half, gutter) when half - gutter > 2, do: half - gutter
+  defp edge_overflow(_half, _gutter), do: 0
 
   defp label_text(cfg, type, %{value: v, label: label}) do
     input = if type == :numeric, do: v, else: label
@@ -394,7 +426,8 @@ defmodule EexCharts.Layout do
     lmin = safe_log(scale.nice_min, lb)
     lmax = safe_log(scale.nice_max, lb)
     range = lmax - lmin
-    lv = safe_log(v, lb)
+    # Zero and negatives have no logarithm; pin them to the axis floor.
+    lv = if is_number(v) and v <= 0, do: lmin, else: safe_log(v, lb)
     l.grid_y + l.grid_h - (lv - lmin) / range * l.grid_h
   end
 

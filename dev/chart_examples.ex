@@ -32,10 +32,28 @@ defmodule Dev.ChartExamples do
   randomness) so the same input always produces byte-identical SVG.
   """
 
+  @extra [
+    Dev.ChartExamples.Stats,
+    Dev.ChartExamples.Hierarchy,
+    Dev.ChartExamples.BarFamily,
+    Dev.ChartExamples.Stacking,
+    Dev.ChartExamples.Circular,
+    Dev.ChartExamples.HeatmapAxes,
+    Dev.ChartExamples.Unit,
+    Dev.ChartExamples.Labels,
+    Dev.ChartExamples.Trellis
+  ]
+
   @doc """
   Returns every chart example as a list of attribute maps.
+
+  The original catalog lives in `base/0`; examples for the features added after
+  v4.7.0 live one module per feature area under `dev/examples/`, appended in
+  `@extra` order so the existing ids keep their positions.
   """
-  def all do
+  def all, do: base() ++ Enum.flat_map(@extra, & &1.examples())
+
+  defp base do
     [
       %{
         id: "c1",

@@ -32,6 +32,7 @@ defmodule EexCharts.Config do
   def build(type, opts \\ %{}) when is_map(opts) do
     defaults()
     |> deep_merge(type_defaults(type))
+    |> deep_merge(EexCharts.Charts.BarFamily.option_defaults(type, opts))
     |> deep_merge(opts)
     |> Map.update!(:chart, &Map.put(&1, :type, type))
     |> EexCharts.Theme.apply(opts)
@@ -74,6 +75,9 @@ defmodule EexCharts.Config do
         fore_color: "#373d3f",
         background: "",
         stacked: false,
+        # `"normal"` or `"100%"` (ApexCharts `chart.stackType`); see
+        # EexCharts.Stacking for line/area stacking.
+        stack_type: "normal",
         offset_x: 0,
         offset_y: 0
       },
@@ -119,6 +123,9 @@ defmodule EexCharts.Config do
         # `drawDataLabel({strokeWidth = 2})`.
         stroke_width: 2,
         formatter: nil,
+        # Drop labels whose estimated boxes collide, balanced across series
+        # (see `EexCharts.DataLabels`).
+        hide_overlapping: false,
         style: %{
           font_size: 12,
           font_weight: 600,
@@ -264,7 +271,18 @@ defmodule EexCharts.Config do
         # them from font metrics. Opting in hands the same job to the same
         # engine and the two agree exactly.
         html: false,
-        markers: %{size: 6, shape: :circle, stroke_width: 0, stroke_color: nil, radius: nil},
+        markers: %{
+          size: 6,
+          shape: :circle,
+          stroke_width: 0,
+          stroke_color: nil,
+          radius: nil,
+          # Per-item marker colours (ApexCharts `legend.markers.fillColors`).
+          fill_colors: nil
+        },
+        # Legend entries that replace the series names (ApexCharts
+        # `legend.customLegendItems`); toggling is off while they are set.
+        custom_legend_items: [],
         item_margin: %{horizontal: 5, vertical: 4},
         labels: %{colors: nil, use_series_colors: false}
       },
@@ -298,14 +316,40 @@ defmodule EexCharts.Config do
           border_radius: 0,
           border_radius_application: :around,
           distributed: false,
-          data_labels: %{position: :top}
+          data_labels: %{position: :top},
+          # ApexCharts v4.7.0 funnel / dumbbell switches (see
+          # `EexCharts.Charts.Funnel` and `EexCharts.Charts.Dumbbell`).
+          is_funnel: false,
+          is_funnel_3d: true,
+          is_dumbbell: false,
+          dumbbell_colors: nil
         },
         candlestick: %{
           colors: %{upward: "#00B746", downward: "#EF403C"},
           wick: %{use_fill_color: true}
         },
         box_plot: %{
-          colors: %{upper: "#00E396", lower: "#008FFB"}
+          colors: %{upper: "#00E396", lower: "#008FFB"},
+          # Raw-observation boxes: Tukey fence multiple (see EexCharts.Stats).
+          whisker: 1.5
+        },
+        # See EexCharts.Charts.Histogram.
+        histogram: %{
+          bins: :auto,
+          bin_width: nil,
+          normalize: :count,
+          cumulative: false,
+          overlay_opacity: 0.5
+        },
+        # See EexCharts.Charts.Violin.
+        violin: %{
+          bandwidth: :silverman,
+          cut: 2,
+          points: 64,
+          scale: :width,
+          inner: :box,
+          raincloud: false,
+          point_size: 2.5
         },
         bubble: %{
           min_bubble_radius: nil,
@@ -322,7 +366,35 @@ defmodule EexCharts.Config do
           distributed: false,
           enable_shades: true,
           shade_intensity: 0.5,
-          border_radius: 4
+          border_radius: 4,
+          # Nested treemaps (nodes with `children`): gap between a group's
+          # frame and its children, and the name band at the top of a group.
+          group_padding: 3,
+          group_header: %{show: true, font_size: 12, font_weight: 600, color: "#fff"}
+        },
+        sunburst: %{
+          start_angle: 0,
+          end_angle: 360,
+          offset_x: 0,
+          offset_y: 0,
+          hole_size: "25%",
+          shade_intensity: 0.5,
+          labels: %{orientation: :auto, padding: 4},
+          total: %{show: true, label: "Total", formatter: nil}
+        },
+        unit: %{
+          layout: :grid,
+          per_unit: 1,
+          max_units: 2000,
+          # `nil`: :square for grid and parliament, :circle for the beeswarm.
+          shape: nil,
+          size: nil,
+          gap: 2,
+          radius: nil,
+          rows: nil,
+          columns: nil,
+          fill_order: :row,
+          parliament: %{inner_radius: 0.4, rows: nil, show_total: true}
         },
         radar: %{
           size: nil,
@@ -342,6 +414,9 @@ defmodule EexCharts.Config do
           offset_y: 0,
           hollow: %{size: "50%", margin: 5, background: "transparent"},
           track: %{show: true, background: "#f2f2f2", stroke_width: "97%", margin: 5, opacity: 1},
+          # Target markers per series (see EexCharts.Charts.RadialBar).
+          targets: [],
+          target: %{color: nil, width: 3, overhang: 3},
           data_labels: %{
             show: true,
             name: %{show: true, font_size: 16, font_weight: 600, color: nil, offset_y: 0},
@@ -363,6 +438,36 @@ defmodule EexCharts.Config do
             }
           }
         },
+        gauge: %{
+          start_angle: -90,
+          end_angle: 90,
+          min: 0,
+          max: 100,
+          offset_x: 0,
+          offset_y: 0,
+          thickness: "18%",
+          track: %{show: true, background: "#f2f2f2"},
+          value_arc: %{show: true, color: nil},
+          bands: [],
+          band_gap: 2,
+          ticks: %{
+            show: true,
+            amount: 10,
+            length: 8,
+            width: 1,
+            color: nil,
+            offset: 4,
+            minor: %{amount: 0, length: 4}
+          },
+          tick_labels: %{show: true, font_size: 11, color: nil, offset: 4, formatter: nil},
+          needle: %{show: true, length: "90%", width: 8, color: nil},
+          hub: %{radius: 8, color: nil, stroke_color: "#fff", stroke_width: 2},
+          data_labels: %{
+            show: true,
+            value: %{font_size: 24, font_weight: 600, color: nil, offset_y: 0, formatter: nil},
+            name: %{show: true, font_size: 13, font_weight: 400, color: nil, offset_y: 0}
+          }
+        },
         polar_area: %{
           rings: %{stroke_width: 1, stroke_color: "#e8e8e8"},
           spokes: %{stroke_width: 1, connector_colors: "#e8e8e8"}
@@ -374,6 +479,10 @@ defmodule EexCharts.Config do
           offset_x: 0,
           offset_y: 0,
           custom_scale: 1,
+          # Rounded slice corners and a constant pixel gap between slices
+          # (pie, donut, polar area); see EexCharts.Charts.Pie.
+          border_radius: 0,
+          spacing: 0,
           data_labels: %{offset: 0, min_angle_to_show_label: 10},
           donut: %{
             size: "65%",
@@ -503,6 +612,28 @@ defmodule EexCharts.Config do
     }
   end
 
+  defp type_defaults(:histogram) do
+    %{
+      data_labels: %{enabled: false},
+      stroke: %{width: 0},
+      fill: %{opacity: 0.85},
+      legend: %{markers: %{shape: :square}},
+      tooltip: %{shared: false, intersect: true},
+      xaxis: %{type: :numeric}
+    }
+  end
+
+  defp type_defaults(:violin) do
+    %{
+      data_labels: %{enabled: false},
+      stroke: %{width: 1},
+      fill: %{opacity: 0.5},
+      legend: %{markers: %{shape: :square}},
+      tooltip: %{shared: false, intersect: true},
+      xaxis: %{tick_placement: :between}
+    }
+  end
+
   defp type_defaults(:range_bar) do
     %{
       chart: %{stacked: false},
@@ -514,6 +645,8 @@ defmodule EexCharts.Config do
       xaxis: %{tick_placement: :between}
     }
   end
+
+  defp type_defaults(:waterfall), do: EexCharts.Charts.Waterfall.type_defaults()
 
   defp type_defaults(:radar) do
     %{
@@ -530,6 +663,16 @@ defmodule EexCharts.Config do
     %{
       data_labels: %{enabled: false},
       stroke: %{line_cap: :butt},
+      fill: %{opacity: 1},
+      tooltip: %{enabled: false},
+      legend: %{show: false},
+      grid: %{show: false}
+    }
+  end
+
+  defp type_defaults(:gauge) do
+    %{
+      data_labels: %{enabled: false},
       fill: %{opacity: 1},
       tooltip: %{enabled: false},
       legend: %{show: false},
@@ -562,6 +705,31 @@ defmodule EexCharts.Config do
     }
   end
 
+  defp type_defaults(:sunburst) do
+    %{
+      # `colors: nil` (the default) picks white or dark text per arc.
+      data_labels: %{enabled: true, style: %{font_size: 11}},
+      stroke: %{colors: ["#fff"], width: 1},
+      fill: %{opacity: 1},
+      tooltip: %{theme: :dark},
+      legend: %{position: :right}
+    }
+  end
+
+  defp type_defaults(:unit) do
+    %{
+      data_labels: %{enabled: false},
+      fill: %{opacity: 1},
+      tooltip: %{shared: false, intersect: true}
+    }
+  end
+
+  defp type_defaults(:waffle) do
+    :unit
+    |> type_defaults()
+    |> deep_merge(%{plot_options: %{unit: %{layout: :grid, rows: 10, columns: 10}}})
+  end
+
   defp type_defaults(:polar_area) do
     %{
       data_labels: %{enabled: false},
@@ -569,6 +737,22 @@ defmodule EexCharts.Config do
       fill: %{opacity: 0.7},
       tooltip: %{theme: :dark},
       legend: %{position: :right}
+    }
+  end
+
+  # Streamgraph: smooth stacked areas around a moving baseline (see
+  # EexCharts.Stacking). The baseline makes the y-axis meaningless, so it and
+  # the horizontal grid lines are off by default.
+  defp type_defaults(:streamgraph) do
+    %{
+      chart: %{stacked: true},
+      plot_options: %{streamgraph: %{offset: :wiggle, order: :none}},
+      data_labels: %{enabled: false},
+      stroke: %{width: 1, curve: :smooth, colors: ["#fff"]},
+      fill: %{type: :solid, opacity: 0.9},
+      markers: %{size: 0, hover: %{size_offset: 6}},
+      yaxis: %{show: false},
+      grid: %{yaxis_lines: false}
     }
   end
 

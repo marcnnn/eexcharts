@@ -7,11 +7,27 @@ defmodule EexCharts.Charts.Pie do
   proportional shares of `end_angle - start_angle`; a donut cuts an inner
   circle at `donut.size%` of the outer radius. Slice labels sit at the
   mid-angle, at `radius / 1.25` for pies and the ring midpoint for donuts.
+
+  ## Spacing and rounded corners
+
+  `plot_options.pie.spacing` (px, default `0`) leaves a constant-width gap
+  between neighbouring slices of pies, donuts and polar area charts, and
+  `plot_options.pie.border_radius` (px, default `0`) rounds the corners where
+  a slice's rim meets its straight edges. The gap is made by insetting both
+  straight edges of every slice by `spacing / 2`, parallel to the radial line,
+  so the strip between two slices is equally wide at the hub and at the rim;
+  slices keep their angles and their labels stay where they were. The corner
+  radius is clamped per slice (at most half the slice's radial thickness, and
+  small enough that the two rim corners of a thin slice do not overlap). A
+  slice thinner than the gap disappears; its label, legend entry and tooltip
+  stay. A single slice covering the whole circle is drawn without inset. See
+  `EexCharts.Charts.Sector` for the geometry.
   """
 
   import EexCharts.SVG
 
   alias EexCharts.{Config, Legend, Scale}
+  alias EexCharts.Charts.Sector
 
   @doc """
   Computes slice geometry. Returns `%{cx, cy, r, donut_r, slices}` where each
@@ -101,11 +117,13 @@ defmodule EexCharts.Charts.Pie do
     slices =
       geo.slices
       |> Enum.reject(&(&1.angle <= 0))
-      |> Enum.map(fn s ->
+      |> Enum.map(&{&1, slice_path(cfg, geo, &1)})
+      |> Enum.reject(fn {_s, d} -> d == [] end)
+      |> Enum.map(fn {s, d} ->
         attrs = %{
           class: "eexcharts-slice",
           data_j: s.index,
-          d: slice_path(geo, s),
+          d: d,
           fill: s.color,
           fill_opacity: cfg.fill.opacity,
           stroke: pie_stroke(cfg),
@@ -216,10 +234,25 @@ defmodule EexCharts.Charts.Pie do
   defp spoke_color(colors, i) when is_list(colors), do: Enum.at(colors, rem(i, length(colors)))
   defp spoke_color(color, _i), do: color
 
+  # Spacing / rounded corners go through `Sector`; a slice that fills the whole
+  # circle has no neighbours to keep apart and no corners, so it keeps the
+  # plain path.
+  defp slice_path(cfg, geo, s) do
+    %{spacing: spacing, border_radius: radius} = cfg.plot_options.pie
+
+    if (spacing > 0 or radius > 0) and s.angle < 359.99 do
+      s.r
+      |> Sector.build(geo.donut_r, s.start_angle, s.angle, spacing / 2, radius)
+      |> Sector.path(geo.cx, geo.cy)
+    else
+      plain_slice_path(geo, s)
+    end
+  end
+
   # Outer arc clockwise, then either wedge to center (pie) or inner arc
   # back (donut). Angle 0 points up; clamped just under a full turn so a
   # 100% slice still renders.
-  defp slice_path(geo, s) do
+  defp plain_slice_path(geo, s) do
     angle = min(s.angle, geo.full_angle - 0.01)
     end_angle = s.start_angle + angle
     large_arc = if angle > 180, do: 1, else: 0

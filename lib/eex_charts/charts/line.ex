@@ -16,7 +16,7 @@ defmodule EexCharts.Charts.Line do
 
   @doc "Renders all series of a line/area chart as an SVG group."
   def render(cfg, series, %Layout{} = l, id) do
-    area? = cfg.chart.type == :area
+    area? = cfg.chart.type in [:area, :streamgraph]
     base_y = area_base_y(l)
 
     defs =
@@ -31,10 +31,12 @@ defmodule EexCharts.Charts.Line do
       end
 
     groups =
-      Enum.map(series, fn s ->
+      series
+      |> draw_order()
+      |> Enum.map(fn s ->
         i = s.index
         color = Config.color_at(cfg, i)
-        points = points_for(s.data, l)
+        points = points_for(s, l)
         segments = segments(points)
 
         area =
@@ -48,7 +50,7 @@ defmodule EexCharts.Charts.Line do
 
             Enum.map(segments, fn seg ->
               el("path", %{
-                d: [line_path(seg, curve(cfg)), area_close(seg, base_y)],
+                d: [line_path(seg, curve(cfg)), area_close(s, seg, base_y, l, curve(cfg))],
                 fill: fill,
                 fill_opacity: opacity,
                 stroke: "none"
@@ -68,7 +70,7 @@ defmodule EexCharts.Charts.Line do
                 el("path", %{
                   d: line_path(seg, curve(cfg)),
                   fill: "none",
-                  stroke: color,
+                  stroke: Config.color_for(cfg.stroke.colors, i) || color,
                   stroke_width: cfg.stroke.width,
                   stroke_linecap: cfg.stroke.line_cap,
                   stroke_linejoin: "round",
@@ -96,7 +98,7 @@ defmodule EexCharts.Charts.Line do
     Enum.map(series, fn s ->
       color = Config.color_at(cfg, s.index)
 
-      s.data
+      s
       |> points_for(l)
       |> Enum.map(fn
         {_j, nil, _x} ->
@@ -130,7 +132,17 @@ defmodule EexCharts.Charts.Line do
   # Area fills fall to the zero baseline (clamped into the grid).
   defp area_base_y(l), do: Layout.zero_y(l)
 
-  defp points_for(data, l) do
+  # Stacked series sit on the top edge of their band at every category (a
+  # `nil` counts as zero, so the line stays continuous); unstacked series
+  # plot their raw values.
+  defp points_for(%{stack: %{hi: hi}} = s, l) do
+    Enum.with_index(hi, fn top, j ->
+      v = Enum.at(s.data, j)
+      {j, if(is_number(v), do: v), {Layout.category_pos(l, j), Layout.y_for(l, top)}}
+    end)
+  end
+
+  defp points_for(%{data: data}, l) do
     Enum.with_index(data, fn v, j ->
       if is_number(v) do
         {j, v, {Layout.category_pos(l, j), Layout.y_for(l, v)}}
@@ -140,11 +152,16 @@ defmodule EexCharts.Charts.Line do
     end)
   end
 
-  # Splits into lists of consecutive non-nil points.
+  # Stacked layers paint top-down (ApexCharts draws stacked series in
+  # reverse), so each band's top stroke lands on the band above it.
+  defp draw_order([%{stack: _} | _] = series), do: Enum.sort_by(series, &(-&1.stack.pos))
+  defp draw_order(series), do: series
+
+  # Splits into lists of consecutive plotted points.
   defp segments(points) do
     points
-    |> Enum.chunk_by(fn {_j, v, _} -> v == nil end)
-    |> Enum.reject(fn [{_j, v, _} | _] -> v == nil end)
+    |> Enum.chunk_by(fn {_j, _v, xy} -> xy == nil end)
+    |> Enum.reject(fn [{_j, _v, xy} | _] -> xy == nil end)
     |> Enum.map(fn seg -> Enum.map(seg, fn {_j, _v, xy} -> xy end) end)
   end
 
@@ -174,6 +191,32 @@ defmodule EexCharts.Charts.Line do
 
   def line_path([{x0, y0} | rest], _straight) do
     [move(x0, y0), Enum.map(rest, fn {x, y} -> line(x, y) end)]
+  end
+
+  # A stacked band closes along the top of the layer below, traced backwards
+  # with the same curve.
+  defp area_close(%{stack: %{lo: lo}}, pts, _base_y, l, curve) do
+    bottom =
+      pts
+      |> Enum.zip(lo)
+      |> Enum.map(fn {{x, _}, v} -> {x, Layout.y_for(l, v)} end)
+      |> Enum.reverse()
+
+    [{x0, y0} | _] = bottom
+    [line(x0, y0), reverse_body(bottom, curve), close()]
+  end
+
+  defp area_close(_s, pts, base_y, _l, _curve), do: area_close(pts, base_y)
+
+  # The path body (without the leading move) through `pts`, which run right
+  # to left. Smooth, straight and monotone curves trace the same shape either
+  # way; a stepline walked backwards has to change level before it runs.
+  defp reverse_body([_first | rest], :stepline),
+    do: Enum.map(rest, fn {x, y} -> [vline(y), hline(x)] end)
+
+  defp reverse_body(pts, curve) do
+    [_move | body] = line_path(pts, curve)
+    body
   end
 
   defp area_close(pts, base_y) do

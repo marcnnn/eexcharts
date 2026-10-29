@@ -48,8 +48,11 @@ defmodule EexCharts.VisualTest do
         # storybook chrome/padding can't cause spurious diffs. Each variation
         # iframe holds exactly one chart, and phoenix_storybook rewrites the
         # component's DOM id (to `<story>-single-<id>`), so scope by the unique
-        # `.eexcharts` class rather than the example id.
-        |> assert_screenshot("#{@example.id}.png", selector: ".eexcharts")
+        # `.eexcharts` class rather than the example id. Trellis panels are
+        # charts nested in the outer chart, so take only the outermost one.
+        |> assert_screenshot("#{@example.id}.png",
+          selector: ".eexcharts:not(.eexcharts .eexcharts)"
+        )
       end
     end
   end

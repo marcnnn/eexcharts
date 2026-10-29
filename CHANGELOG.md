@@ -8,6 +8,35 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Chart types and features beyond ApexCharts v4.7.0, built from public
+  release-note descriptions only (no v5+ code; provenance in
+  `docs/PARITY.md`):
+  - `:histogram` with automatic (Freedman-Diaconis, Sturges, Scott, sqrt) or
+    fixed bins, `:count` / `:probability` / `:percent` / `:density`
+    normalisation and cumulative output; `:violin` with Gaussian KDE and an
+    optional raincloud layout; box plots computed from raw observations.
+  - `:sunburst`, and treemaps nested to any depth with group headers.
+  - `:funnel`, `:pyramid`, `:waterfall` (subtotals, totals, connectors) and
+    `:dumbbell`; v4.7.0's `is_funnel`, `is_dumbbell` and
+    `legend.custom_legend_items` ported.
+  - Series `group:` for side-by-side stacks, and `chart.stack_type: "100%"`
+    for bars (per group), area and line. Stacked area and line
+    (`chart.stacked: true`) now stack; they used to overlap.
+  - `:streamgraph` with wiggle (Byron & Wattenberg) and silhouette baselines.
+  - `:gauge` with bands, ticks, needle and centre labels; radial-bar
+    `targets`; `plot_options.pie.border_radius` and `spacing`.
+  - `:unit` (grid, parliament, beeswarm layouts) and `:waffle`.
+  - Trellis small multiples via `options.trellis`, with shared scales,
+    one legend and labels only on edge panels.
+  - Heatmaps on numeric and datetime x-axes, and a gradient colour-bar legend
+    (`legend.gradient`).
+  - Annotation dash patterns and `stroke_linecap`; balanced
+    `data_labels.hide_overlapping`; per-point `data_labels.offset_x/y`
+    functions; tooltips on point annotations; log axes below 1.
+- SVG invariant lint (`test/svg_invariants_test.exs`) over every catalog
+  example in light, dark and live output, a contact sheet for human review
+  (`mix run dev/contact_sheet.exs`), and `docs/VALIDATION.md`.
+
 - Styled segments inside one axis label. A label line from
   `xaxis.labels.formatter` or `yaxis.formatter` may now be a list of segments,
   where a segment is a string or a map with `:text` and any of `:fill`,
@@ -19,6 +48,17 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Dark theme: annotation labels and data labels on light series colours were
+  near-invisible (the fore colour on a white or light box, contrast about
+  1.1:1, as in ApexCharts v4). Text now switches to dark grey only when it
+  would otherwise be practically invisible (below 1.5:1); every legible
+  default keeps its ApexCharts colour.
+- The last category label of a line or area chart no longer clips at the
+  right edge when it is wider than the right gutter.
+- Horizontal bars drew their category labels by `xaxis.labels.show` and value
+  labels by `yaxis.labels.show`, the reverse of how the layout sized them.
+- Horizontal crowded bar categories are thinned to every k-th label instead
+  of overlapping.
 - Styled label segments line up with the text around them in resvg-based
   renderers (Typst, Inkscape exports). `dominant-baseline` is not inherited in
   SVG 1.1, and resvg/usvg follow 1.1: a `tspan` that does not set it falls back

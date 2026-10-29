@@ -25,6 +25,18 @@ defmodule EexCharts.Annotations do
   two values. The label is a pill (rect + text) placed at the line/band per
   `label.position` (`:left` / `:center` / `:right`).
 
+  ### Stroke patterns
+
+  Lines and band borders of x and y annotations take
+
+    * `stroke_dash_array`: a number (equal dashes and gaps, the default `1`
+      draws a fine dotted line; `0` is solid) or a full pattern, as a list
+      (`[6, 3, 1, 3]`) or a string (`"6 3 1 3"`). The pattern is emitted
+      verbatim as `stroke-dasharray`; invalid patterns draw solid.
+    * `stroke_linecap`: `:butt`, `:round` or `:square`. Unset (the default)
+      leaves the SVG default, butt. Caps apply to every dash, so `:round`
+      with a `[0, 6]` pattern draws a row of dots.
+
   ### x-axis annotations
 
   `%{x:, x2:, ...same styling..., label:}`. `x` alone draws a vertical line,
@@ -53,6 +65,13 @@ defmodule EexCharts.Annotations do
   `%{x:, y:, marker: %{size:, fill_color:, stroke_color:, stroke_width:,
   shape:}, label:}`. Draws a marker (circle or square) at the data position
   with a label pill above it. `x` resolves like an x-axis annotation's.
+
+  `tooltip: "text"` adds a hover tooltip to the point. It reuses the chart's
+  tooltip box and the stock hook: an invisible hover target over the marker
+  carries `data-j="anno-<k>"` and the tooltip HTML holds a matching tip, so
+  no extra JavaScript is involved. Works with `tooltip.enabled: false` too;
+  `push_hover` events are not sent for annotation tips. Static SVG output
+  (`EexCharts.to_svg/4`) drops it.
 
   ## Horizontal bar charts (`layout.horizontal`)
 
@@ -311,10 +330,8 @@ defmodule EexCharts.Annotations do
   defp point_annotation(cfg, l, anno0) do
     anno = Config.deep_merge(point_defaults(), anno0)
 
-    with {:ok, px0} <- x_pos(cfg, l, anno.x),
-         true <- is_number(anno.y) and in_range?(l, anno.y) do
+    with {:ok, {cx, cy}} <- point_place(cfg, l, anno) do
       m = anno.marker
-      {cx, cy} = point_coords(l, px0, anno.y, m)
       label = anno.label
       fs = label.style.font_size
       above = cy + label.offset_y - m.size - fs / 1.6
@@ -325,6 +342,60 @@ defmodule EexCharts.Annotations do
     else
       _ -> []
     end
+  end
+
+  # Marker centre of a (defaults-merged) point annotation, or `:skip`.
+  defp point_place(cfg, l, anno) do
+    with {:ok, px0} <- x_pos(cfg, l, anno.x),
+         true <- is_number(anno.y) and in_range?(l, anno.y) do
+      {:ok, point_coords(l, px0, anno.y, anno.marker)}
+    else
+      _ -> :skip
+    end
+  end
+
+  # ── point annotation tooltips ─────────────────────────────────────────────
+
+  @doc """
+  Transparent hover targets over every point annotation that has a
+  `tooltip`. Rendered last (above the category hover zones) so the pointer
+  reaches them; each carries `data-j="anno-<k>"` (k = position in
+  `annotations.points`), which the stock hook resolves to the tip of the same
+  `data-j` from `tooltips/1`.
+  """
+  def hover_targets(cfg, %Layout{} = l) do
+    targets =
+      for {anno, k} <- tooltip_points(cfg),
+          {:ok, {cx, cy}} <- [point_place(cfg, l, anno)] do
+        el("circle", %{
+          class: "eexcharts-annotation-hover",
+          cx: cx,
+          cy: cy,
+          r: max(anno.marker.size + 4, 8),
+          fill: "transparent",
+          data_j: "anno-#{k}"
+        })
+      end
+
+    if targets == [], do: [], else: el("g", %{class: "eexcharts-annotation-hovers"}, targets)
+  end
+
+  @doc "Server-rendered tooltip bodies for the point annotations' `tooltip` text."
+  def tooltips(cfg) do
+    for {anno, k} <- tooltip_points(cfg) do
+      el("div", %{class: "eexcharts-tip", data_j: "anno-#{k}", hidden: true}, [
+        el("div", %{class: "eexcharts-tip-row"}, esc(to_string(anno.tooltip)))
+      ])
+    end
+  end
+
+  defp tooltip_points(cfg) do
+    anns = cfg[:annotations] || %{}
+
+    (Map.get(anns, :points, []) || [])
+    |> Enum.with_index()
+    |> Enum.map(fn {a, k} -> {Config.deep_merge(point_defaults(), a), k} end)
+    |> Enum.reject(fn {a, _k} -> blank?(a.tooltip) end)
   end
 
   # Keeps a point label's pill inside the plot. The default spot (centered
@@ -423,6 +494,7 @@ defmodule EexCharts.Annotations do
       stroke: anno.border_color,
       stroke_width: anno.border_width,
       stroke_dasharray: dash(anno.stroke_dash_array),
+      stroke_linecap: linecap(anno.stroke_linecap),
       class: "eexcharts-annotation-line"
     })
   end
@@ -438,12 +510,44 @@ defmodule EexCharts.Annotations do
       stroke: anno.border_color,
       stroke_width: anno.border_width,
       stroke_dasharray: dash(anno.stroke_dash_array),
+      stroke_linecap: linecap(anno.stroke_linecap),
       class: "eexcharts-annotation-rect"
     })
   end
 
-  defp dash(0), do: nil
-  defp dash(v), do: v
+  # `stroke_dash_array`: a number (dash = gap), or a full pattern as a list
+  # (`[6, 3, 1, 3]`) or a string (`"6 3 1 3"`, commas allowed). 0, nil and
+  # an empty pattern draw a solid stroke.
+  defp dash(v) when is_number(v) and v <= 0, do: nil
+  defp dash(v) when is_number(v), do: v
+  defp dash(v) when is_binary(v), do: v |> String.split([" ", ","], trim: true) |> dash()
+
+  defp dash(v) when is_list(v) do
+    nums = Enum.map(v, &dash_number/1)
+
+    if nums == [] or Enum.any?(nums, &is_nil/1) or Enum.all?(nums, &(&1 == 0)),
+      do: nil,
+      else: Enum.map_join(nums, " ", &EexCharts.SVG.fmt/1)
+  end
+
+  defp dash(_v), do: nil
+
+  defp dash_number(n) when is_number(n) and n >= 0, do: n
+
+  defp dash_number(s) when is_binary(s) do
+    case Float.parse(s) do
+      {n, ""} when n >= 0 -> n
+      _ -> nil
+    end
+  end
+
+  defp dash_number(_), do: nil
+
+  # `stroke_linecap`: :butt / :round / :square (atoms or strings). Unset or
+  # unknown leaves the attribute off, so the SVG default (butt) applies.
+  defp linecap(c) when c in [:butt, :round, :square], do: Atom.to_string(c)
+  defp linecap(c) when c in ["butt", "round", "square"], do: c
+  defp linecap(_c), do: nil
 
   # Label pill: rect background + centered text. `y` is the vertical center of
   # the text. Returns [] when there is no label text.
@@ -487,7 +591,7 @@ defmodule EexCharts.Annotations do
             y: y,
             text_anchor: anchor,
             dominant_baseline: "central",
-            fill: style.color || cfg.chart.fore_color,
+            fill: style.color || EexCharts.Color.legible(cfg.chart.fore_color, style.background),
             font_size: fs,
             font_weight: style.font_weight,
             class: "eexcharts-annotation-label"
@@ -614,6 +718,7 @@ defmodule EexCharts.Annotations do
       y: nil,
       y2: nil,
       stroke_dash_array: 1,
+      stroke_linecap: nil,
       fill_color: "#c2c2c2",
       border_color: "#c2c2c2",
       border_width: 1,
@@ -629,6 +734,7 @@ defmodule EexCharts.Annotations do
       x: nil,
       x2: nil,
       stroke_dash_array: 1,
+      stroke_linecap: nil,
       fill_color: "#c2c2c2",
       border_color: "#c2c2c2",
       border_width: 1,
@@ -644,6 +750,7 @@ defmodule EexCharts.Annotations do
     %{
       x: nil,
       y: nil,
+      tooltip: nil,
       marker: %{
         size: 4,
         fill_color: "#fff",
