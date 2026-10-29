@@ -8,12 +8,13 @@ defmodule EexCharts.Renderer do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, DataLabels, LabelText, Layout, Legend, Stacking}
+  alias EexCharts.{Charts, Config, DataLabels, Indexed, LabelText, Layout, Legend, Stacking}
 
   # Circular / hierarchical types own their full SVG assembly.
   @standalone_types %{
     radial_bar: Charts.RadialBar,
     gauge: Charts.Gauge,
+    level_meter: Charts.LevelMeter,
     radar: Charts.Radar,
     heatmap: Charts.Heatmap,
     treemap: Charts.Treemap,
@@ -41,6 +42,11 @@ defmodule EexCharts.Renderer do
     params = if params[:static], do: staticize_params(params), else: params
     {type, params} = Charts.BarFamily.resolve(type, params)
 
+    params =
+      params
+      |> Map.update(:series, nil, &EexCharts.Numbers.sanitize/1)
+      |> Map.update(:categories, nil, &EexCharts.Numbers.sanitize/1)
+
     opts =
       (params[:options] || %{})
       |> put_if(params[:width], [:chart, :width])
@@ -49,6 +55,7 @@ defmodule EexCharts.Renderer do
 
     cfg = Config.build(type, opts) |> Charts.BarFamily.finalize(params)
     cfg = if params[:static], do: staticize_cfg(cfg), else: cfg
+    cfg = Config.index_colors(cfg)
 
     cond do
       type in [:pie, :donut, :polar_area] ->
@@ -118,12 +125,14 @@ defmodule EexCharts.Renderer do
   defp render_cartesian(cfg, params, id) do
     cfg = Stacking.prepare(cfg)
     {cfg, all_series} = prepare_series(cfg, normalize_series(params[:series]))
+    cfg = EexCharts.EndLabels.prepare(cfg, all_series)
     hidden = hidden_set(params)
     series = Enum.reject(all_series, &MapSet.member?(hidden, &1.index))
 
     names = Legend.names(cfg, Enum.map(all_series, & &1.name))
     n = series |> Enum.map(&length(&1.data)) |> Enum.max(fn -> 0 end)
     n = max(n, length(cfg.xaxis.categories))
+    n = if cfg.chart.type == :range_bar, do: Charts.RangeBar.row_count(cfg, series, n), else: n
     series = Stacking.annotate(cfg, series, n)
 
     base_range =
@@ -144,6 +153,9 @@ defmodule EexCharts.Renderer do
     x_range = if Layout.value_x?(cfg), do: x_value_range(cfg, series, n), else: nil
 
     l = Layout.build(cfg, names, n, y_ranges, x_range)
+
+    {cfg, l} =
+      Charts.RangeBar.fit_labels(cfg, series, l, &Layout.build(&1, names, n, y_ranges, x_range))
 
     categories =
       if cfg.chart.type == :histogram,
@@ -256,6 +268,7 @@ defmodule EexCharts.Renderer do
 
   defp prepare_series(%{chart: %{type: :violin}} = cfg, s), do: Charts.Violin.prepare(cfg, s)
   defp prepare_series(%{chart: %{type: :bar}} = cfg, s), do: {cfg, Charts.Bar.prepare(s)}
+  defp prepare_series(%{chart: %{type: :range_bar}} = cfg, s), do: Charts.RangeBar.prepare(cfg, s)
   defp prepare_series(cfg, series), do: {cfg, series}
 
   defp data_range(cfg, series) do
@@ -336,9 +349,10 @@ defmodule EexCharts.Renderer do
       if cfg.chart.stacked and cfg.chart.type == :bar do
         # Stacked: extremes are the per-category positive and negative sums.
         n = series |> Enum.map(&length(&1.data)) |> Enum.max(fn -> 0 end)
+        columns = Enum.map(series, &Indexed.new(&1.data))
 
         Enum.flat_map(0..max(n - 1, 0), fn j ->
-          vals = Enum.map(series, fn s -> Enum.at(s.data, j) end) |> Enum.filter(&is_number/1)
+          vals = columns |> Enum.map(&Indexed.at(&1, j)) |> Enum.filter(&is_number/1)
           pos = vals |> Enum.filter(&(&1 >= 0)) |> Enum.sum()
           neg = vals |> Enum.filter(&(&1 < 0)) |> Enum.sum()
           [pos, neg]
@@ -385,16 +399,28 @@ defmodule EexCharts.Renderer do
         xmlns: "http://www.w3.org/2000/svg",
         class: "eexcharts-svg",
         font_family: cfg.chart.font_family,
+        shape_rendering: sparkline_shape_rendering(cfg),
         style: svg_style(cfg, l)
       },
       children
     )
   end
 
+  # A sparkline's bars are a few pixels wide and their edges land on half
+  # pixels (a 160px row of 16 bars puts the first at x = 1.5), so a static
+  # render blurs every edge. Snap them; lines and arcs keep anti-aliasing.
+  @crisp_types [:bar, :range_bar, :waterfall, :histogram]
+
+  defp sparkline_shape_rendering(%{chart: %{type: type}} = cfg) when type in @crisp_types do
+    if Config.sparkline?(cfg), do: "crispEdges"
+  end
+
+  defp sparkline_shape_rendering(_cfg), do: nil
+
   defp svg_style(cfg, l) do
     if cfg.chart.pixel_perfect,
-      do: "width:#{fmt(l.w)}px;height:#{fmt(l.h)}px;display:block;",
-      else: "width:100%;height:auto;display:block;"
+      do: style(width: "#{fmt(l.w)}px", height: "#{fmt(l.h)}px", display: "block"),
+      else: style(width: "100%", height: "auto", display: "block")
   end
 
   @doc false
@@ -706,7 +732,9 @@ defmodule EexCharts.Renderer do
       color = axis_label_color(style.colors, cfg.chart.fore_color)
 
       labels =
-        Enum.map(l.scale.ticks, fn t ->
+        l.scale.ticks
+        |> Enum.with_index()
+        |> Enum.map(fn {t, i} ->
           el(
             "text",
             %{
@@ -717,7 +745,7 @@ defmodule EexCharts.Renderer do
               font_size: style.font_size,
               font_weight: style.font_weight
             },
-            esc(Layout.format_y_label(cfg, axis, t))
+            esc(horizontal_value_label(cfg, l, axis, t, i))
           )
         end)
 
@@ -726,6 +754,13 @@ defmodule EexCharts.Renderer do
       []
     end
   end
+
+  # A timeline's value axis is a time scale: its labels come with the layout
+  # and, as on a datetime x-axis, the x-axis formatter gets them formatted.
+  defp horizontal_value_label(cfg, %Layout{value_labels: [_ | _] = labels}, _axis, _t, i),
+    do: LabelText.plain(format_x_label(cfg, Enum.at(labels, i), i))
+
+  defp horizontal_value_label(cfg, _l, axis, t, _i), do: Layout.format_y_label(cfg, axis, t)
 
   @doc false
   # Value x-axis labels for charts that own their SVG assembly (heatmap).
@@ -942,12 +977,18 @@ defmodule EexCharts.Renderer do
       case cfg.chart.type do
         :bar -> bar_data_labels(cfg, series, l)
         :waterfall -> Charts.Waterfall.data_labels(cfg, series, l)
+        :range_bar -> range_bar_data_labels(cfg, series, l)
         _ -> point_data_labels(cfg, series, l)
       end
     else
       []
     end
   end
+
+  defp range_bar_data_labels(%{plot_options: %{bar: %{is_dumbbell: true}}} = cfg, series, l),
+    do: point_data_labels(cfg, series, l)
+
+  defp range_bar_data_labels(cfg, series, l), do: Charts.RangeBar.data_labels(cfg, series, l)
 
   defp bar_data_labels(cfg, series, l) do
     dl = cfg.data_labels
@@ -1254,16 +1295,22 @@ defmodule EexCharts.Renderer do
   # tooltip is off.
   defp cartesian_tooltips(cfg, series, categories, n, anno_tips) do
     if cfg.tooltip.enabled and n > 0 do
+      cats = Indexed.new(categories)
+      columns = Enum.map(series, &{&1, Indexed.new(&1.data), EexCharts.Goals.indexed(&1)})
+
       tips =
         Enum.map(0..(n - 1), fn j ->
-          title = Enum.at(categories, j, to_string(j + 1))
+          title = Indexed.at(cats, j, to_string(j + 1))
           title = format_tooltip_x(cfg, title)
 
           rows =
-            Enum.map(series, fn s ->
-              v = Enum.at(s.data, j)
+            Enum.map(columns, fn {s, data, goals} ->
+              v = Indexed.at(data, j)
 
               cond do
+                cfg.chart.type == :range_bar and not cfg.plot_options.bar.is_dumbbell ->
+                  Charts.RangeBar.tooltip_rows(cfg, s, j)
+
                 v == nil ->
                   []
 
@@ -1277,7 +1324,7 @@ defmodule EexCharts.Renderer do
                       s.name,
                       Stacking.tooltip_value(s, j, tooltip_value(cfg, v))
                     ),
-                    goal_rows(cfg, s, j)
+                    goal_rows(cfg, EexCharts.Goals.of(goals, j))
                   ]
               end
             end)
@@ -1295,8 +1342,9 @@ defmodule EexCharts.Renderer do
   end
 
   # v4.7.0 lists a point's goals under its value.
-  defp goal_rows(cfg, s, j) do
-    for g <- EexCharts.Goals.of(s, j) do
+  @doc false
+  def goal_rows(cfg, goals) do
+    for g <- goals do
       tooltip_row(
         EexCharts.Goals.color(cfg, g),
         to_string(g[:name] || ""),
@@ -1308,7 +1356,7 @@ defmodule EexCharts.Renderer do
   @doc false
   def tooltip_row(color, label, value) do
     el("div", %{class: "eexcharts-tip-row"}, [
-      el("span", %{class: "eexcharts-tip-marker", style: "background:#{color}"}, ""),
+      el("span", %{class: "eexcharts-tip-marker", style: style(background: color)}, ""),
       el("span", %{class: "eexcharts-tip-label"}, [esc(label), ": "]),
       el("span", %{class: "eexcharts-tip-value"}, esc(value))
     ])
@@ -1321,7 +1369,7 @@ defmodule EexCharts.Renderer do
       %{
         class: tooltip_class(cfg.tooltip.theme),
         data_theme: tooltip_data_theme(cfg.tooltip.theme),
-        style: "font-size:#{fmt(cfg.tooltip.style.font_size)}px"
+        style: style(font_size: "#{fmt(cfg.tooltip.style.font_size)}px")
       },
       tips
     )
@@ -1375,12 +1423,13 @@ defmodule EexCharts.Renderer do
   defp render_pie(cfg, params, id) do
     {all_values, all_labels} = pie_values_labels(cfg, params)
     hidden = hidden_set(params)
+    labels_t = Indexed.new(all_labels)
 
     {values, labels, indices} =
       all_values
       |> Enum.with_index()
       |> Enum.reject(fn {_v, i} -> MapSet.member?(hidden, i) end)
-      |> Enum.map(fn {v, i} -> {v, Enum.at(all_labels, i), i} end)
+      |> Enum.map(fn {v, i} -> {v, Indexed.at(labels_t, i), i} end)
       |> Enum.reduce({[], [], []}, fn {v, lab, i}, {vs, ls, is} ->
         {[v | vs], [lab | ls], [i | is]}
       end)
@@ -1486,15 +1535,14 @@ defmodule EexCharts.Renderer do
 
   def container(cfg, params, id, svg, tooltips) do
     fixed? = cfg.chart.max_width != false and is_number(cfg.chart.width)
-    max_w = if fixed?, do: "max-width:#{fmt(cfg.chart.width)}px;", else: ""
+    max_w = if fixed?, do: "#{fmt(cfg.chart.width)}px"
 
     # ApexCharts reserves `parentHeightOffset` px below a fixed-size chart by
     # raising the host element's min-height; mirror it so a chart dropped into
     # an ApexCharts-shaped layout occupies the same box.
     min_h =
       if fixed? and is_number(cfg.chart.height) and cfg.chart.parent_height_offset > 0,
-        do: "min-height:#{fmt(cfg.chart.height + cfg.chart.parent_height_offset)}px;",
-        else: ""
+        do: "#{fmt(cfg.chart.height + cfg.chart.parent_height_offset)}px"
 
     el(
       "div",
@@ -1504,7 +1552,7 @@ defmodule EexCharts.Renderer do
         "phx-hook": if(params[:hook] == false, do: nil, else: "EexCharts"),
         "phx-update": "replace",
         data_push_hover: params[:push_hover] || nil,
-        style: "position:relative;#{max_w}#{min_h}"
+        style: style(position: "relative", max_width: max_w, min_height: min_h)
       },
       [svg, tooltips]
     )

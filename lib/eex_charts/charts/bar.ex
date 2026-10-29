@@ -13,7 +13,7 @@ defmodule EexCharts.Charts.Bar do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Goals, Layout, PointStyle}
+  alias EexCharts.{Config, Goals, Indexed, Layout, PointStyle}
 
   @doc """
   Renders all bar series as an SVG group; returns `{iodata, bar_rects}`.
@@ -76,11 +76,11 @@ defmodule EexCharts.Charts.Bar do
   # Map points keep their `fill_color` & co. under `source_data` (see
   # `prepare/1`).
   defp with_styles(rects, cfg, series) do
-    by_index = Map.new(series, &{&1.index, &1})
+    by_index = Map.new(series, &{&1.index, {&1, Indexed.new(&1[:source_data] || &1.data)}})
 
     Enum.map(rects, fn r ->
-      s = by_index[r.series]
-      point = Enum.at(s[:source_data] || s.data, r.index)
+      {s, points} = by_index[r.series]
+      point = Indexed.at(points, r.index)
       Map.put(r, :style, PointStyle.resolve(cfg, s, point, r.color))
     end)
   end
@@ -124,6 +124,7 @@ defmodule EexCharts.Charts.Bar do
 
     if cfg.chart.stacked do
       bar_w = slot * pct(bar_cfg.column_width) / 100
+      columns = Enum.map(series, &Indexed.new(&1.data))
 
       series
       |> Enum.with_index()
@@ -132,7 +133,7 @@ defmodule EexCharts.Charts.Bar do
 
         Enum.with_index(s.data, fn v, j ->
           v = v || 0
-          {pos, neg} = stack_base(series, pos_i, j)
+          {pos, neg} = stack_base(columns, pos_i, j)
           base = if v >= 0, do: pos, else: neg
           y_from = Layout.y_for(l, clamp(l, base))
           y_to = Layout.y_for(l, clamp(l, base + v))
@@ -148,7 +149,7 @@ defmodule EexCharts.Charts.Bar do
             value: v,
             color: bar_color(cfg, s.index, j, color),
             positive: v >= 0,
-            last_in_stack: last_nonzero?(series, pos_i, j, v)
+            last_in_stack: last_nonzero?(columns, pos_i, j, v)
           }
         end)
       end)
@@ -192,6 +193,7 @@ defmodule EexCharts.Charts.Bar do
 
     if cfg.chart.stacked do
       bar_h = slot * pct(bar_cfg.bar_height) / 100
+      columns = Enum.map(series, &Indexed.new(&1.data))
 
       series
       |> Enum.with_index()
@@ -200,7 +202,7 @@ defmodule EexCharts.Charts.Bar do
 
         Enum.with_index(s.data, fn v, j ->
           v = v || 0
-          {pos, neg} = stack_base(series, pos_i, j)
+          {pos, neg} = stack_base(columns, pos_i, j)
           base = if v >= 0, do: pos, else: neg
           x_from = Layout.x_for(l, clamp(l, base))
           x_to = Layout.x_for(l, clamp(l, base + v))
@@ -216,7 +218,7 @@ defmodule EexCharts.Charts.Bar do
             value: v,
             color: bar_color(cfg, s.index, j, color),
             positive: v >= 0,
-            last_in_stack: last_nonzero?(series, pos_i, j, v)
+            last_in_stack: last_nonzero?(columns, pos_i, j, v)
           }
         end)
       end)
@@ -253,21 +255,22 @@ defmodule EexCharts.Charts.Bar do
   end
 
   # Sum of values stacked below series `i` at datapoint `j`, split by sign.
-  defp stack_base(series, i, j) do
-    series
+  # `columns` holds each series' data as a tuple (see `EexCharts.Indexed`).
+  defp stack_base(columns, i, j) do
+    columns
     |> Enum.take(i)
-    |> Enum.map(fn s -> Enum.at(s.data, j) || 0 end)
+    |> Enum.map(fn data -> Indexed.at(data, j) || 0 end)
     |> Enum.reduce({0, 0}, fn v, {pos, neg} ->
       if v >= 0, do: {pos + v, neg}, else: {pos, neg + v}
     end)
   end
 
-  defp last_nonzero?(series, i, j, v) do
+  defp last_nonzero?(columns, i, j, v) do
     v != 0 and
-      series
+      columns
       |> Enum.drop(i + 1)
-      |> Enum.all?(fn s ->
-        val = Enum.at(s.data, j) || 0
+      |> Enum.all?(fn data ->
+        val = Indexed.at(data, j) || 0
         val == 0 or val >= 0 != v >= 0
       end)
   end

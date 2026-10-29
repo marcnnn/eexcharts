@@ -73,11 +73,17 @@ defmodule EexCharts.Theme do
   # between adjacent marks and marker rings are cut out of it.
   @daisy_surface "var(--color-base-100, #fff)"
   @daisy_track "var(--color-base-200, #f2f2f2)"
+  @daisy_warning "var(--color-warning, #FEB019)"
   @daisy_border "var(--color-base-300, #e0e0e0)"
   @daisy_border_soft "var(--color-base-300, #e8e8e8)"
   # Goal markers sit on the page, beside or over a bar; base-content contrasts
   # with every daisyUI surface.
   @daisy_goal "var(--color-base-content, #a8a8a8)"
+
+  # Waterfall bar kinds and their connector (`EexCharts.Charts.Waterfall`).
+  @daisy_waterfall %{increase: "success", decrease: "error", total: "primary"}
+  @waterfall_fallbacks %{increase: "#00E396", decrease: "#FF4560", total: "#008FFB"}
+  @daisy_connector "var(--color-base-300, #a8a8a8)"
 
   @doc "Returns the named palette (`:palette1`..`:palette10`, `:chartjs`), or palette1."
   def palette(name), do: Map.get(@palettes, name, @palettes.palette1)
@@ -96,9 +102,11 @@ defmodule EexCharts.Theme do
   Under `mode: :daisy` the following are mapped to daisyUI variables: the
   series palette, on-mark data label colors, `chart.fore_color`, the grid and
   x-axis border/tick colors, the white separator between adjacent marks, marker
-  stroke rings, the default bar goal colour, the radial-bar track, the
-  radar/polar-area rings and spokes, and the tooltip. Setting `theme.palette` keeps daisyUI chrome but restores an
-  ApexCharts palette for the series.
+  stroke rings, the default bar goal colour, the radial-bar and level-meter
+  tracks, the level meter's below-target colour, the radar/polar-area rings and
+  spokes, the waterfall kind, label and connector colors, and the tooltip.
+  Setting `theme.palette` keeps daisyUI chrome but restores an ApexCharts
+  palette for the series.
   """
   def apply(cfg, opts \\ %{}) do
     case cfg.theme.mode do
@@ -120,6 +128,7 @@ defmodule EexCharts.Theme do
     |> put_fore_color(opts)
     |> put_tooltip_theme(opts)
     |> put_gauge_track(opts)
+    |> put_level_meter_track(opts)
   end
 
   # ApexCharts' light #f2f2f2 track glares on a dark chart. The gauge is not
@@ -130,6 +139,15 @@ defmodule EexCharts.Theme do
       cfg
     else
       put_in(cfg, [:plot_options, :gauge, :track, :background], "#4b4f52")
+    end
+  end
+
+  # Same for the level meter's empty segments (an EexCharts type too).
+  defp put_level_meter_track(cfg, opts) do
+    if get_in(opts, [:plot_options, :level_meter, :track, :color]) do
+      cfg
+    else
+      put_in(cfg, [:plot_options, :level_meter, :track, :color], "#4b4f52")
     end
   end
 
@@ -164,12 +182,19 @@ defmodule EexCharts.Theme do
   defp apply_daisy(cfg, opts) do
     cfg
     |> daisy_series(opts)
+    |> daisy_annotations()
     |> put_unless_set([:chart, :fore_color], @daisy_fore, opts)
     |> put_unless_set([:grid, :border_color], @daisy_border, opts)
     |> put_unless_set([:xaxis, :axis_border, :color], @daisy_border, opts)
     |> put_unless_set([:xaxis, :axis_ticks, :color], @daisy_border, opts)
     |> put_unless_set([:markers, :stroke_colors], @daisy_surface, opts)
     |> put_unless_set([:plot_options, :radial_bar, :track, :background], @daisy_track, opts)
+    |> put_unless_set([:plot_options, :level_meter, :track, :color], @daisy_track, opts)
+    |> put_unless_set(
+      [:plot_options, :level_meter, :below_target_color],
+      @daisy_warning,
+      opts
+    )
     |> put_unless_set(
       [:plot_options, :radar, :polygons, :stroke_colors],
       @daisy_border_soft,
@@ -192,6 +217,7 @@ defmodule EexCharts.Theme do
     )
     |> daisy_separator_stroke(opts)
     |> put_unless_set([:plot_options, :bar, :goals, :stroke_color], @daisy_goal, opts)
+    |> daisy_waterfall(opts)
     |> put_unless_set([:tooltip, :theme], :daisy, opts)
   end
 
@@ -202,6 +228,52 @@ defmodule EexCharts.Theme do
       not is_nil(cfg.colors) or not is_nil(opts[:colors]) -> cfg
       pal = cfg.theme.palette -> %{cfg | colors: palette(pal)}
       true -> cfg |> Map.put(:colors, @daisy_colors) |> daisy_label_colors(opts)
+    end
+  end
+
+  # Annotation label pills and point markers default to a white box with grey
+  # and #333 edges (ApexCharts Options.js). Their text is `chart.fore_color`,
+  # which daisyUI makes base-content: light on a dark theme, so on the white
+  # pill it vanished. Pills and markers the user did not colour follow the
+  # surface instead; the fallbacks keep static output on the ApexCharts values.
+  @daisy_annotation_border "var(--color-base-300, #c2c2c2)"
+  @daisy_annotation_marker "var(--color-base-content, #333)"
+
+  defp daisy_annotations(%{annotations: %{} = annos} = cfg) do
+    annos =
+      Map.new(annos, fn
+        {kind, items} when is_list(items) -> {kind, Enum.map(items, &daisy_annotation/1)}
+        other -> other
+      end)
+
+    %{cfg | annotations: annos}
+  end
+
+  defp daisy_annotations(cfg), do: cfg
+
+  defp daisy_annotation(%{} = anno) do
+    anno
+    |> put_new_in([:label, :border_color], @daisy_annotation_border)
+    |> put_new_in([:label, :style, :background], @daisy_surface)
+    |> daisy_annotation_marker()
+  end
+
+  defp daisy_annotation(other), do: other
+
+  defp daisy_annotation_marker(%{x: _, y: _} = anno) do
+    anno
+    |> put_new_in([:marker, :fill_color], @daisy_surface)
+    |> put_new_in([:marker, :stroke_color], @daisy_annotation_marker)
+  end
+
+  defp daisy_annotation_marker(anno), do: anno
+
+  defp put_new_in(map, [key], value), do: Map.put_new(map, key, value)
+
+  defp put_new_in(map, [key | rest], value) do
+    case Map.get(map, key, %{}) do
+      %{} = inner -> Map.put(map, key, put_new_in(inner, rest, value))
+      _ -> map
     end
   end
 
@@ -228,6 +300,42 @@ defmodule EexCharts.Theme do
       cfg
     end
   end
+
+  # A kind given as `:outline` or as a map without `:color` still wants the
+  # daisyUI colour; a kind given a colour keeps it. Labels on a daisy-coloured
+  # kind take its paired content colour, labels on a user-coloured kind the
+  # type's own white (as for a user palette), unless label colours were set.
+  defp daisy_waterfall(%{chart: %{type: :waterfall}} = cfg, opts) do
+    wf = [:plot_options, :waterfall]
+
+    {colors, label_colors} =
+      Enum.reduce(@daisy_waterfall, {%{}, %{}}, fn {kind, name}, {colors, labels} ->
+        var = "var(--color-#{name}, #{@waterfall_fallbacks[kind]})"
+
+        case get_in(opts, wf ++ [:colors, kind]) do
+          color when is_binary(color) ->
+            {Map.put(colors, kind, color), Map.put(labels, kind, "#fff")}
+
+          spec ->
+            {Map.put(colors, kind, daisy_kind(spec, var)),
+             Map.put(labels, kind, "var(--color-#{name}-content, #fff)")}
+        end
+      end)
+
+    label_colors =
+      if get_in(opts, [:data_labels, :style, :colors]), do: %{}, else: label_colors
+
+    cfg
+    |> update_in(wf ++ [:colors], &Map.merge(&1, colors))
+    |> update_in(wf ++ [:label_colors], &Map.merge(label_colors, &1 || %{}))
+    |> put_unless_set(wf ++ [:connector, :color], @daisy_connector, opts)
+  end
+
+  defp daisy_waterfall(cfg, _opts), do: cfg
+
+  defp daisy_kind(nil, var), do: var
+  defp daisy_kind(:outline, var), do: %{color: var, fill: %{type: :none}}
+  defp daisy_kind(%{} = spec, var), do: Map.put_new(spec, :color, var)
 
   defp put_unless_set(cfg, path, value, opts) do
     if is_nil(get_in(opts, path)), do: put_in(cfg, path, value), else: cfg

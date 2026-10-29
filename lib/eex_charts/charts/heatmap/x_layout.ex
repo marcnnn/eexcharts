@@ -36,11 +36,15 @@ defmodule EexCharts.Charts.Heatmap.XLayout do
   def value_axis?(cfg), do: cfg.xaxis.type in [:numeric, :datetime]
 
   @doc """
-  Resolves a series into `[{x, y}]` for a value x-axis: numeric `x` (unix ms
-  on a datetime axis) and a numeric `y`. Points without either are dropped.
+  Resolves a series into `[{x, y, point}]` for a value x-axis: numeric `x`
+  (unix ms on a datetime axis), a numeric `y` and the raw data point (for its
+  per-cell paint and label). Points without `x` or `y` are dropped.
   """
   def points(cfg, data) do
-    for {_j, x, y, _z} <- Layout.series_points(cfg, data), is_number(x), is_number(y), do: {x, y}
+    for {point, {_j, x, y, _z}} <- Enum.zip(data, Layout.series_points(cfg, data)),
+        is_number(x),
+        is_number(y),
+        do: {x, y, point}
   end
 
   @doc "Median spacing between consecutive distinct sorted values."

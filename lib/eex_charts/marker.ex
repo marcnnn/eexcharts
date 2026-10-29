@@ -112,7 +112,23 @@ defmodule EexCharts.Marker do
 
   def shape_for(shape, _i), do: shape
 
-  defp normalize(s) when is_binary(s), do: normalize(String.to_atom(s))
+  # Shape names may come from user data (`markers.discrete`, a saved
+  # setting), so strings are looked up instead of converted: every new atom
+  # is permanent, and enough distinct names would exhaust the atom table.
+  @shapes %{
+    "circle" => :circle,
+    "square" => :square,
+    "rect" => :square,
+    "triangle" => :triangle,
+    "diamond" => :diamond,
+    "cross" => :cross,
+    "plus" => :plus,
+    "star" => :star,
+    "sparkle" => :sparkle,
+    "line" => :line
+  }
+
+  defp normalize(s) when is_binary(s), do: Map.get(@shapes, s, :circle)
   defp normalize(:rect), do: :square
   defp normalize(s) when is_atom(s), do: s
   defp normalize(_), do: :circle

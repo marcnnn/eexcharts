@@ -194,6 +194,22 @@ defmodule EexCharts.GoalsTest do
       assert html =~ ~r/background:#775DD0.*Target: .*60/s
       assert html =~ ~r/background:#a8a8a8.*Stretch: .*70/s
     end
+
+    test "timeline row tooltips list the goals of every bar in the row" do
+      series = [
+        %{
+          name: "Plan",
+          data: [
+            %{x: "Design", y: [1, 4], goals: [goal(3, %{name: "Review"})]},
+            %{x: "Design", y: [5, 7]}
+          ]
+        }
+      ]
+
+      html = live(:range_bar, series, options: %{plot_options: %{bar: %{horizontal: true}}})
+
+      assert html =~ ~r/Review: .*3/s
+    end
   end
 
   describe "themes" do

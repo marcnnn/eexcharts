@@ -6,11 +6,17 @@ defmodule EexCharts.Charts.Line do
   points offset by 35% of the x-gap — ApexCharts' constant), `:straight`,
   `:stepline`, `:monotone_cubic` (Fritsch–Carlson monotone spline). `nil`
   values split the line into segments.
+
+  `stroke.width` and `markers.size` may be lists indexed by series (ApexCharts'
+  array form). A series `opacity` (0-1) scales its stroke, area fill and
+  markers, for many faint lines behind a few highlighted ones. Series with an
+  `end_label` get a direct label at their last point (see
+  `EexCharts.EndLabels`).
   """
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Layout}
+  alias EexCharts.{Config, EndLabels, Layout}
 
   @smooth_factor 0.35
 
@@ -47,6 +53,7 @@ defmodule EexCharts.Charts.Line do
                 else: color
 
             opacity = if cfg.fill.type == :gradient, do: nil, else: cfg.fill.opacity
+            opacity = fade(opacity, s[:opacity])
 
             Enum.map(segments, fn seg ->
               el("path", %{
@@ -71,7 +78,8 @@ defmodule EexCharts.Charts.Line do
                   d: line_path(seg, curve(cfg)),
                   fill: "none",
                   stroke: Config.color_for(cfg.stroke.colors, i) || color,
-                  stroke_width: cfg.stroke.width,
+                  stroke_width: Config.color_for(cfg.stroke.width, i),
+                  stroke_opacity: s[:opacity],
                   stroke_linecap: cfg.stroke.line_cap,
                   stroke_linejoin: "round",
                   stroke_dasharray: dash(cfg.stroke.dash_array, i)
@@ -84,18 +92,25 @@ defmodule EexCharts.Charts.Line do
         el("g", %{class: "eexcharts-series", seriesName: nil}, [
           area,
           line,
-          markers(cfg, points, color, i)
+          markers(cfg, points, color, s.index, s[:opacity])
         ])
       end)
 
-    [defs, groups]
+    end_labels = EndLabels.render(cfg, Enum.map(series, &{&1, points_for(&1, l)}), l)
+
+    [defs, groups, end_labels]
   end
+
+  # A series `opacity` scales the chart-wide one; nil when neither is set,
+  # so the attribute is left out.
+  defp fade(base, nil), do: base
+  defp fade(nil, opacity), do: opacity
+  defp fade(base, opacity), do: base * opacity
 
   @doc "Hover markers (hidden until the hook activates a data point index)."
   def hover_markers(cfg, series, %Layout{} = l) do
-    r = hover_radius(cfg)
-
     Enum.map(series, fn s ->
+      r = hover_radius(cfg, s.index)
       color = Config.color_at(cfg, s.index)
 
       s
@@ -119,8 +134,8 @@ defmodule EexCharts.Charts.Line do
     end)
   end
 
-  defp hover_radius(cfg) do
-    cfg.markers.hover.size || max(cfg.markers.size, 2) + cfg.markers.hover.size_offset
+  defp hover_radius(cfg, i) do
+    cfg.markers.hover.size || max(marker_size(cfg, i), 2) + cfg.markers.hover.size_offset
   end
 
   defp curve(cfg), do: cfg.stroke.curve
@@ -230,13 +245,14 @@ defmodule EexCharts.Charts.Line do
   defp monotone_beziers([_] = _pts), do: []
 
   defp monotone_beziers(pts) do
-    xs = Enum.map(pts, &elem(&1, 0))
-    ys = Enum.map(pts, &elem(&1, 1))
-    n = length(pts)
+    xs = pts |> Enum.map(&elem(&1, 0)) |> List.to_tuple()
+    ys = pts |> Enum.map(&elem(&1, 1)) |> List.to_tuple()
+    n = tuple_size(xs)
 
     slopes =
-      Enum.zip(Enum.chunk_every(pts, 2, 1, :discard), 0..(n - 2))
-      |> Enum.map(fn {[{x1, y1}, {x2, y2}], _i} ->
+      pts
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.map(fn [{x1, y1}, {x2, y2}] ->
         if x2 == x1, do: 0.0, else: (y2 - y1) / (x2 - x1)
       end)
 
@@ -250,9 +266,9 @@ defmodule EexCharts.Charts.Line do
 
     # Fritsch–Carlson clamp for monotonicity.
     m =
-      Enum.reduce(0..(n - 2), List.to_tuple(m0), fn i, m ->
-        d = Enum.at(slopes, i)
-
+      slopes
+      |> Enum.with_index()
+      |> Enum.reduce(List.to_tuple(m0), fn {d, i}, m ->
         cond do
           abs(d) < 1.0e-6 ->
             m |> put_elem(i, 0.0) |> put_elem(i + 1, 0.0)
@@ -273,25 +289,32 @@ defmodule EexCharts.Charts.Line do
 
     # Control arms: 1/6 of the neighbour x-spacing, damped by slope.
     tangents =
-      Enum.map(0..(n - 1), fn i ->
-        prev_x = Enum.at(xs, max(i - 1, 0))
-        next_x = Enum.at(xs, min(i + 1, n - 1))
+      0..(n - 1)
+      |> Enum.map(fn i ->
+        prev_x = elem(xs, max(i - 1, 0))
+        next_x = elem(xs, min(i + 1, n - 1))
         mi = elem(m, i)
         s = (next_x - prev_x) / (6 * (1 + mi * mi))
         {s, mi * s}
       end)
+      |> List.to_tuple()
 
     Enum.map(0..(n - 2), fn i ->
-      {x1, y1} = {Enum.at(xs, i), Enum.at(ys, i)}
-      {x2, y2} = {Enum.at(xs, i + 1), Enum.at(ys, i + 1)}
-      {tx1, ty1} = Enum.at(tangents, i)
-      {tx2, ty2} = Enum.at(tangents, i + 1)
+      {x1, y1} = {elem(xs, i), elem(ys, i)}
+      {x2, y2} = {elem(xs, i + 1), elem(ys, i + 1)}
+      {tx1, ty1} = elem(tangents, i)
+      {tx2, ty2} = elem(tangents, i + 1)
       curve(x1 + tx1, y1 + ty1, x2 - tx2, y2 - ty2, x2, y2)
     end)
   end
 
-  defp markers(cfg, points, color, i) do
-    if cfg.markers.size > 0 do
+  # `markers.size` may be a list indexed by series (ApexCharts' array form).
+  defp marker_size(cfg, i), do: Config.color_for(cfg.markers.size, i) || 0
+
+  defp markers(cfg, points, color, i, opacity) do
+    size = marker_size(cfg, i)
+
+    if size > 0 do
       Enum.map(points, fn
         {_j, nil, _} ->
           []
@@ -302,12 +325,12 @@ defmodule EexCharts.Charts.Line do
             data_j: j,
             cx: x,
             cy: y,
-            r: cfg.markers.size,
+            r: size,
             fill: Config.color_for(cfg.markers.colors, i) || color,
-            fill_opacity: cfg.markers.fill_opacity,
+            fill_opacity: fade(cfg.markers.fill_opacity, opacity),
             stroke: Config.color_for(cfg.markers.stroke_colors, i) || color,
             stroke_width: cfg.markers.stroke_width,
-            stroke_opacity: cfg.markers.stroke_opacity
+            stroke_opacity: fade(cfg.markers.stroke_opacity, opacity)
           })
       end)
     else

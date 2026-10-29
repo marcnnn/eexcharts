@@ -14,12 +14,29 @@ defmodule EexCharts.SvgInvariantsTest do
 
   alias EexCharts.SvgInvariants
 
+  @sparkline_hover "sparkline: the plot fills the SVG, so the hover marker on the first " <>
+                     "and last point (live output only) overhangs the edge, as in ApexCharts " <>
+                     "v4.7.0; reserving room for it would shrink a 24px plot. Drawn markers are " <>
+                     "padded and stay inside"
+
   # Deliberate exceptions: the check is too strict for an intentional design.
   # Each entry matches violations by example id (a string, or `:any`), check
   # and a regex (string, OTP 28 cannot store compiled regexes in attributes) on
   # the element description, and carries its reason.
   @allow [
     # %{id: "x1", check: :text_overlap, element: "...", reason: "..."}
+    %{
+      id: "sp3",
+      check: :bounds,
+      element: "^circle\\.eexcharts-hover-marker",
+      reason: @sparkline_hover
+    },
+    %{
+      id: "sp4",
+      check: :bounds,
+      element: "^circle\\.eexcharts-hover-marker",
+      reason: @sparkline_hover
+    }
   ]
 
   # Real renderer defects found by this suite and not fixed yet. Same shape as `@allow`, plus `:variant` (the
@@ -147,6 +164,22 @@ defmodule EexCharts.SvgInvariantsTest do
   defp expected_legend_entries(%{type: :heatmap, options: %{legend: %{gradient: g}}})
        when g not in [nil, false],
        do: nil
+
+  # Heatmap colour ranges: one entry per range instead of per series, plus
+  # one for a named marked-column bar.
+  defp expected_legend_entries(%{
+         type: :heatmap,
+         options:
+           %{plot_options: %{heatmap: %{color_scale: %{ranges: [_ | _] = ranges}}}} = options
+       }) do
+    case options do
+      %{xaxis: %{marked: [_ | _], marked_bar: %{name: name}}} when name != nil ->
+        length(ranges) + 1
+
+      _ ->
+        length(ranges)
+    end
+  end
 
   # Sunburst: one entry per top-level branch, which is each point of a single
   # series, or each series when there are several.

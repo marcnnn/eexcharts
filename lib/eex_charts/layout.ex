@@ -31,6 +31,7 @@ defmodule EexCharts.Layout do
             y_axes: [],
             x_scale: nil,
             x_type: :category,
+            value_labels: nil,
             legend: nil,
             title_h: 0
 
@@ -58,9 +59,7 @@ defmodule EexCharts.Layout do
     w = dim(cfg.chart.width, 600)
     h = dim(cfg.chart.height, 350)
 
-    horizontal =
-      get_in(cfg, [:plot_options, :bar, :horizontal]) == true &&
-        cfg.chart.type in [:bar, :range_bar]
+    horizontal = horizontal?(cfg)
 
     pad = cfg.grid.padding
 
@@ -79,8 +78,6 @@ defmodule EexCharts.Layout do
         {mn, mx} = Enum.at(y_ranges, i, hd(y_ranges))
         axis_scale(axis, mn, mx, svg_dim)
       end)
-
-    primary = hd(scales)
 
     x_font = cfg.xaxis.labels.style.font_size
     categories = cfg.xaxis.categories
@@ -139,7 +136,7 @@ defmodule EexCharts.Layout do
 
     right =
       pad.right + legend_right + right_title_w + right_label_w +
-        if(right_label_w > 0, do: 10, else: 0)
+        if(right_label_w > 0, do: 10, else: 0) + end_label_reserve(cfg)
 
     bottom_legend_h = if legend.position in [:bottom, :top], do: legend.h, else: 0
 
@@ -153,16 +150,33 @@ defmodule EexCharts.Layout do
     grid_w = max(w - grid_x - right, 10)
     grid_h = max(h - grid_y - bottom, 10)
 
+    {grid_x, grid_y, grid_w, grid_h} =
+      if Config.sparkline?(cfg),
+        do: sparkline_grid(cfg, w, h, title_h),
+        else: {grid_x, grid_y, grid_w, grid_h}
+
     x_scale = build_x_scale(cfg, x_range, grid_w)
+
+    # A timeline (horizontal range bars, `xaxis.type: :datetime`) keeps its
+    # categories down the left; the datetime axis is the horizontal value axis.
+    {scales, value_labels} =
+      if horizontal and cfg.chart.type == :range_bar and cfg.xaxis.type == :datetime,
+        do: time_value_scale(cfg, hd(y_ranges), grid_w, scales),
+        else: {scales, nil}
+
+    primary = hd(scales)
 
     # A value x-axis centers its first and last labels on the plot edges, so
     # half of each overflows. ApexCharts reserves that overhang
     # (`additionalPaddingXLabels` → xPadLeft/xPadRight); without it the outer
     # labels are clipped by the SVG viewBox.
     {x_pad_left, x_pad_right} =
-      if x_scale,
-        do: x_label_overhang(cfg, x_scale),
-        else: category_edge_overhang(cfg, n, horizontal, grid_x, right)
+      cond do
+        Config.sparkline?(cfg) -> {0, 0}
+        x_scale -> x_label_overhang(cfg, x_scale)
+        value_labels -> time_label_overhang(cfg, primary, value_labels, grid_w)
+        true -> category_edge_overhang(cfg, n, horizontal, grid_x, right)
+      end
 
     grid_x = grid_x + x_pad_left
     grid_w = max(grid_w - x_pad_left - x_pad_right, 10)
@@ -186,9 +200,74 @@ defmodule EexCharts.Layout do
       y_axes: y_axes,
       x_scale: x_scale,
       x_type: if(x_scale, do: x_scale.type, else: :category),
+      value_labels: value_labels,
       legend: legend,
       title_h: title_h
     }
+  end
+
+  # Room right of the plot for line end labels, measured by
+  # `EexCharts.EndLabels.prepare/2`; 0 unless they are on.
+  defp end_label_reserve(%{end_labels: %{enabled: true, reserve: w}}), do: w
+  defp end_label_reserve(_cfg), do: 0
+
+  # ── Sparkline ──────────────────────────────────────────────────────────────
+  #
+  # ApexCharts' `Dimensions.plotCoords` for `chart.sparkline`: no axis gutters,
+  # no x-label band and no legend space, so the plot fills the SVG minus the
+  # grid padding (zero by default, see `Config.sparkline?/1`). Each padding
+  # side is raised to what the marks need: half the stroke width at the top
+  # and bottom, and on every side the marker pad.
+  defp sparkline_grid(cfg, w, h, title_h) do
+    pad = cfg.grid.padding
+    m = sparkline_marker_pad(cfg)
+    stroke = sparkline_stroke_pad(cfg)
+
+    left = max(pad.left, m)
+    right = max(pad.right, m)
+    top = pad.top |> max(m) |> max(stroke)
+    bottom = pad.bottom |> max(m) |> max(stroke)
+
+    grid_y = title_h + top
+    {left, grid_y, max(w - left - right, 1), max(h - grid_y - bottom, 1)}
+  end
+
+  # ApexCharts pads by `largestSize / 1.5`, where `largestSize` is the marker
+  # radius plus the hover growth. With the default hover offset of 3 that
+  # still cuts a marker's outline at the edge (radius 4 + stroke 2 against a
+  # 4.7px pad), so the pad is at least the drawn marker: radius plus half its
+  # stroke.
+  defp sparkline_marker_pad(cfg) do
+    mk = cfg.markers
+
+    size =
+      [mk.size | Enum.map(mk.discrete, &(&1[:size] || 0))]
+      |> List.flatten()
+      |> Enum.filter(&is_number/1)
+      |> Enum.max(fn -> 0 end)
+
+    if size > 0 do
+      hover = if is_number(mk.hover.size), do: mk.hover.size, else: size + mk.hover.size_offset
+
+      stroke_w =
+        mk.stroke_width |> List.wrap() |> Enum.filter(&is_number/1) |> Enum.max(fn -> 0 end)
+
+      max(hover / 1.5, size + stroke_w / 2)
+    else
+      0
+    end
+  end
+
+  defp sparkline_stroke_pad(cfg) do
+    if cfg.stroke.show == false do
+      0
+    else
+      cfg.stroke.width
+      |> List.wrap()
+      |> Enum.filter(&is_number/1)
+      |> Enum.max(fn -> 0 end)
+      |> Kernel./(2)
+    end
   end
 
   # Chooses the appropriate scale (linear/nice or logarithmic) for one y-axis.
@@ -332,6 +411,45 @@ defmodule EexCharts.Layout do
     %{type: :datetime, ticks: labels, nice_min: x_min, nice_max: x_max}
   end
 
+  # The horizontal value axis of a timeline: the data range as is (no nice
+  # rounding, as ApexCharts' timeline), datetime ticks from `TimeScale`, and
+  # their labels kept alongside since a `Scale` holds bare tick values.
+  # `xaxis.min` / `xaxis.max` bound it like a datetime x-axis.
+  defp time_value_scale(cfg, {mn, mx}, grid_w, [_primary | rest]) do
+    mn = time_bound(cfg.xaxis.min) || mn || 0
+    mx = time_bound(cfg.xaxis.max) || mx || mn
+    mx = if mx > mn, do: mx, else: mn + 86_400_000
+
+    ticks = TimeScale.ticks(mn, mx, grid_w)
+    scale = %Scale{ticks: Enum.map(ticks, & &1.value), nice_min: mn, nice_max: mx}
+    {[scale | rest], Enum.map(ticks, & &1.label)}
+  end
+
+  defp time_bound(nil), do: nil
+  defp time_bound(v), do: TimeScale.to_ms(v)
+
+  # The last time tick is centred on its value, which can sit close enough to
+  # the right edge for half its label to hang past it.
+  defp time_label_overhang(_cfg, %{ticks: []}, _labels, _grid_w), do: {0, 0}
+
+  defp time_label_overhang(cfg, scale, labels, grid_w) do
+    if cfg.xaxis.labels.show do
+      half =
+        LabelText.width(
+          List.last(labels),
+          cfg.xaxis.labels.style.font_size,
+          metrics(cfg, cfg.xaxis.labels.style)
+        ) / 2
+
+      room =
+        (scale.nice_max - List.last(scale.ticks)) / (scale.nice_max - scale.nice_min) * grid_w
+
+      {0, max(half - room - cfg.grid.padding.right, 0)}
+    else
+      {0, 0}
+    end
+  end
+
   @doc """
   Category division for grouped bar-like charts.
 
@@ -428,13 +546,19 @@ defmodule EexCharts.Layout do
     range = lmax - lmin
     # Zero and negatives have no logarithm; pin them to the axis floor.
     lv = if is_number(v) and v <= 0, do: lmin, else: safe_log(v, lb)
-    l.grid_y + l.grid_h - (lv - lmin) / range * l.grid_h
+    l.grid_y + l.grid_h - frac(lv - lmin, range) * l.grid_h
   end
 
   def y_for(%__MODULE__{} = l, v, %{nice_min: min, nice_max: max}) do
     range = max - min
-    l.grid_y + l.grid_h - (v - min) / range * l.grid_h
+    l.grid_y + l.grid_h - frac(v - min, range) * l.grid_h
   end
+
+  # Position within a range. A scale whose ends coincide (a log axis over
+  # values <= 0, where every log is 0) puts everything at its start instead
+  # of dividing by zero.
+  defp frac(_offset, range) when range == 0, do: 0.0
+  defp frac(offset, range), do: offset / range
 
   defp safe_log(v, _lb) when not is_number(v) or v <= 0, do: 0.0
   defp safe_log(v, lb), do: :math.log(v) / lb
@@ -443,7 +567,7 @@ defmodule EexCharts.Layout do
   def x_for(%__MODULE__{} = l, v) do
     %{nice_min: min, nice_max: max} = l.scale
     range = max - min
-    l.grid_x + (v - min) / range * l.grid_w
+    l.grid_x + frac(v - min, range) * l.grid_w
   end
 
   @doc "Pixel y of the zero baseline, clamped into the grid."
@@ -616,14 +740,29 @@ defmodule EexCharts.Layout do
   def to_x(v, _type) when is_number(v), do: v
   def to_x(v, _type), do: TimeScale.to_ms(v)
 
-  @doc "The effective x-axis kind for a config: `:category`, `:numeric` or `:datetime`."
+  @doc """
+  The effective x-axis kind for a config: `:category`, `:numeric` or
+  `:datetime`.
+
+  Horizontal bars and range bars keep their categories on the (vertical) x
+  axis whatever `xaxis.type` says: as in ApexCharts, `xaxis.type: :datetime`
+  on a horizontal chart describes the value axis (a timeline), see
+  `horizontal?/1`.
+  """
   def x_type(cfg) do
     cond do
+      horizontal?(cfg) -> :category
       cfg.xaxis.type == :datetime -> :datetime
       cfg.xaxis.type == :numeric -> :numeric
       cfg.chart.type in [:scatter, :bubble] -> :numeric
       true -> :category
     end
+  end
+
+  @doc "True for horizontal bar and range bar charts (`plot_options.bar.horizontal`)."
+  def horizontal?(cfg) do
+    get_in(cfg, [:plot_options, :bar, :horizontal]) == true &&
+      cfg.chart.type in [:bar, :range_bar, :waterfall]
   end
 
   @doc "True when the x-axis is positioned by value rather than category slot."
@@ -637,6 +776,7 @@ defmodule EexCharts.Layout do
   def series_points(cfg, data) do
     xt = x_type(cfg)
     cats = cfg.xaxis.categories
+    cats_t = EexCharts.Indexed.new(cats)
 
     data
     |> Enum.with_index()
@@ -645,7 +785,7 @@ defmodule EexCharts.Layout do
 
       x =
         if is_number(v) and cats != [] and xt in [:numeric, :datetime] do
-          to_x(Enum.at(cats, j), xt)
+          to_x(EexCharts.Indexed.at(cats_t, j), xt)
         else
           x
         end

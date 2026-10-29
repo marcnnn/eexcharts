@@ -12,6 +12,12 @@ defmodule EexCharts.TimeScale do
   interpreted as UTC.
   """
 
+  # `DateTime` covers years -9999..9999. Timestamps are clamped to years
+  # -9000..9000, so a tick rounded outward to the next year or month boundary
+  # still has a date.
+  @min_ms -346_179_744_000_000
+  @max_ms 221_845_392_000_000
+
   @ms_per_day 86_400_000
   @epoch ~N[1970-01-01 00:00:00]
 
@@ -37,8 +43,8 @@ defmodule EexCharts.TimeScale do
   def to_ms(%DateTime{} = dt), do: DateTime.to_unix(dt, :millisecond)
   def to_ms(%NaiveDateTime{} = ndt), do: NaiveDateTime.diff(ndt, @epoch, :millisecond)
   def to_ms(%Date{} = d), do: to_ms(NaiveDateTime.new!(d, ~T[00:00:00]))
-  def to_ms(n) when is_integer(n), do: n
-  def to_ms(n) when is_float(n), do: round(n)
+  def to_ms(n) when is_integer(n), do: clamp_ms(n)
+  def to_ms(n) when is_float(n), do: n |> max(@min_ms) |> min(@max_ms) |> round()
 
   def to_ms(str) when is_binary(str) do
     cond do
@@ -68,8 +74,14 @@ defmodule EexCharts.TimeScale do
     # Bounds can arrive as floats (a user-supplied `xaxis.min`, a computed
     # range). Everything below indexes the calendar in whole milliseconds, so
     # normalize once here rather than guarding every generator.
-    {min_ms, max_ms} = {round(min_ms), round(max_ms)}
+    {min_ms, max_ms} = {clamp_ms(round(min_ms)), clamp_ms(round(max_ms))}
 
+    if max_ms > min_ms, do: calendar_ticks(min_ms, max_ms, grid_width), else: []
+  end
+
+  def ticks(_min, _max, _w), do: []
+
+  defp calendar_ticks(min_ms, max_ms, grid_width) do
     span_days = (max_ms - min_ms) / @ms_per_day
     unit = determine_unit(span_days)
     target = max(2, round(grid_width / 150))
@@ -78,8 +90,6 @@ defmodule EexCharts.TimeScale do
     |> generate(min_ms, max_ms, target)
     |> label_ticks(unit)
   end
-
-  def ticks(_min, _max, _w), do: []
 
   # Sub-day ticks are labelled HH:mm, which says nothing about *which* day a
   # point belongs to once the range crosses midnight. Promote the first tick
@@ -93,6 +103,16 @@ defmodule EexCharts.TimeScale do
       {%{value: ms, unit: unit, label: label}, date}
     end)
     |> elem(0)
+  end
+
+  # A month scale names the year at January instead of "Jan", as
+  # `generateMonthScale` switches the tick's unit to `year` there.
+  defp label_ticks(values, :month) do
+    Enum.map(values, fn ms ->
+      {_y, m} = month_of(ms)
+      unit = if m == 1, do: :year, else: :month
+      %{value: ms, unit: unit, label: format_date(ms, @formats[unit])}
+    end)
   end
 
   defp label_ticks(values, unit) do
@@ -139,8 +159,11 @@ defmodule EexCharts.TimeScale do
     step = pick_step([1, 2, 3, 6, 12], span_months / target)
 
     {y, m} = month_of(min)
-    # First month boundary at or after min, then step months apart.
+    # First month boundary at or after min, then step months apart. Steps
+    # divide the year, so snapping the first tick to a multiple of the step
+    # puts quarters on Jan/Apr/Jul/Oct and yearly ticks on January.
     {sy, sm} = if month_start_ms(y, m) >= min, do: {y, m}, else: add_months(y, m, 1)
+    {sy, sm} = add_months(sy, sm, rem(step - rem(sm - 1, step), step))
 
     Stream.iterate({sy, sm}, fn {yy, mm} -> add_months(yy, mm, step) end)
     |> Stream.map(fn {yy, mm} -> month_start_ms(yy, mm) end)
@@ -198,8 +221,12 @@ defmodule EexCharts.TimeScale do
 
   # ── Calendar helpers (UTC) ─────────────────────────────────────────────────
 
+  defp clamp_ms(ms), do: ms |> max(@min_ms) |> min(@max_ms)
+
+  defp from_unix(ms), do: ms |> round() |> clamp_ms() |> DateTime.from_unix!(:millisecond)
+
   defp month_of(ms) do
-    d = DateTime.from_unix!(ms, :millisecond)
+    d = from_unix(ms)
     {d.year, d.month}
   end
 
@@ -221,7 +248,7 @@ defmodule EexCharts.TimeScale do
   Supports `yyyy`, `yy`, `MMMM`, `MMM`, `MM`, `dd`, `HH`, `mm`, `ss`.
   """
   def format_date(ms, format) do
-    d = DateTime.from_unix!(ms, :millisecond)
+    d = from_unix(ms)
 
     replacements = [
       {"yyyy", pad(d.year, 4)},

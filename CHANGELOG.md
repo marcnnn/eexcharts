@@ -8,6 +8,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `EexCharts.PDF`: charts drawn as PDF operators, for
+  [PrawnEx](https://hex.pm/packages/prawn_ex). `ops/4` returns the drawing
+  operations as plain tuples and needs no dependency; `to_pdf/4` writes a
+  one-page document and needs `prawn_ex` with its graphics-state operators
+  (`concat_matrix`, `set_dash`, `set_line_cap`, `set_line_join`), which are not
+  yet in a Hex release. Gradients degrade to their first stop, and fill and
+  stroke share one opacity. See `EexCharts.PDF.Ops`.
 - Chart types and features beyond ApexCharts v4.7.0, built from public
   release-note descriptions only (no v5+ code; provenance in
   `docs/PARITY.md`):
@@ -58,7 +65,50 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   implementation (`EexCharts.LabelText`), so all three measure segments the same
   way when reserving space, and y-axis formatters may return several lines too.
 
+- Per-point and per-series paint (`EexCharts.PointStyle`, #29, #33): data
+  points take `fill_color`, `stroke_color` and `fill` on bar, range bar,
+  dumbbell, waterfall and heatmap. `fill: %{type: :none}` draws a mark
+  outline-only, and `fill.type: :pattern` (v4.7.0 styles: vertical,
+  horizontal and slanted lines, squares, circles) works per point, per series
+  or chart-wide. Bars accept `%{x:, y:}` points. Series keep extra keys such
+  as `fill`, `opacity` and `end_label`, and static output resolves `var()` in
+  series data as well as in the config.
+- Heatmap tables (#29, #32): per-cell `label` (string or lines of styled
+  segments), `plot_options.heatmap.reverse_rows`, `xaxis.position: :top`
+  (heatmap only), `row_groups` with `group_gap`, `summary_rows` with
+  `summary_gap`, `xaxis.marked` with `xaxis.marked_bar`, and
+  `plot_options.heatmap.enable_shades`.
+- Bar and range bar `goals` on data points (v4.7.0, #31), with
+  `stroke_width`, `stroke_height`, `stroke_color`, `stroke_dash_array` and
+  `stroke_line_cap`; goal values extend the axis and appear in the tooltip.
+  `shape: :circle` with `size:` draws a dot instead of a line.
+- Sparkline mode, `chart.sparkline.enabled` (v4.7.0, #36): no axes, grid,
+  legend or labels, and the plot gets the whole SVG, for charts inline in
+  table rows. Static output stays sharp at small sizes.
+- `:level_meter` chart (#30): rows of segments filled up to a value, with
+  fractional fill, matrix or list layout, a target colour and gap, and gains
+  and drops against a previous value.
+- Line and area end labels (#35): `end_label` on a series and the
+  `end_labels` option label each line at its last point, nudged apart when
+  they collide, with room reserved on the right. Series take `opacity`, and
+  `stroke.width` / `markers.size` accept one value per series.
+- Horizontal waterfall (#34), and per-kind waterfall styles: each of
+  `increase`, `decrease` and `total` takes a colour, `:outline` or
+  `%{color:, fill:}`.
+- Timeline range bars (#33): horizontal range bars on a datetime axis take
+  `Date`, `DateTime`, `NaiveDateTime`, ISO or unix ms ranges, points sharing
+  an `x` share a row (`range_bar_group_rows`, `range_bar_overlap`), bars carry
+  a `label`, `plot_options.bar.data_labels.position: :outside_end` puts
+  labels past the bar end, and x annotations (a "Today" line) sit on the time
+  axis.
+
 ### Fixed
+
+- daisy theme: annotation label pills and point markers follow the daisyUI
+  surface, so their text stays readable on dark daisyUI themes. Waterfall
+  kind, connector and on-bar label colours follow the theme too.
+- Month time scales name the year at January ("2024" instead of "Jan '24"),
+  as v4.7.0 does, and stepped ticks line up with the calendar.
 
 - Dark theme: annotation labels and data labels on light series colours were
   near-invisible (the fore colour on a white or light box, contrast about
@@ -71,6 +121,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   labels by `yaxis.labels.show`, the reverse of how the layout sized them.
 - Horizontal crowded bar categories are thinned to every k-th label instead
   of overlapping.
+- Extreme numeric data no longer raises. Every chart type raised
+  `ArithmeticError` on values near the float limit (`±1.0e308`), and line
+  charts on values too small or too close together for a scale. Series and
+  categories are now clamped to `±1.0e100` and magnitudes below `1.0e-100`
+  become `0.0` (`EexCharts.Numbers`); the scale clamps a forced `min`/`max` the
+  same way and treats a range below float precision as degenerate. Values from
+  `1e21` up are labelled in exponent form (`1.0e21`), as JavaScript does.
+- A logarithmic y-axis over values `<= 0` renders instead of raising.
+- Datetime values outside years -9000..9000 are clamped instead of raising in
+  `DateTime.from_unix!/2`.
+- Heatmaps accept ApexCharts' `%{x:, y:}` points; without
+  `xaxis.categories`, the first series' `x` values name the columns. A cell
+  without a numeric value is left empty instead of raising.
 - Styled label segments line up with the text around them in resvg-based
   renderers (Typst, Inkscape exports). `dominant-baseline` is not inherited in
   SVG 1.1, and resvg/usvg follow 1.1: a `tspan` that does not set it falls back
@@ -96,6 +159,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   chart and one at the left or right edge cut it in half. The default spot is
   kept when it fits; otherwise the label flips below the marker and slides in
   from the side edge.
+- `EexCharts.Live` treats the size its hook reports as untrusted: each side is
+  rounded and clamped to 1-10,000 px, and a `"measured"` event without two
+  numbers is ignored. A client could send `1.0e308`, which raised in the
+  layout, or a payload without `width`, which crashed the component.
+- Marker shape names given as strings are looked up instead of converted with
+  `String.to_atom/1`. Unknown names draw a circle, as unknown atoms already
+  did, and no longer add a permanent atom each, so shapes taken from user data
+  cannot exhaust the atom table.
 - Radar charts size their label reserve from the formatted labels. A formatter
   that wraps long categories onto several lines used to free no space, because
   the reserve was still measured on the raw, unwrapped category; now it uses the
@@ -127,6 +198,33 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   callers that all guard on `is_number/1` first. Both are gone; rendered output
   is unchanged, as the SVG goldens confirm. CI runs the suite on 1.20 as well,
   and the format and warning gates moved to it.
+
+### Security
+
+- CSS values can no longer add CSS of their own. A color or font family was
+  HTML-escaped but otherwise written into `style` attributes as is, so a
+  series color of `red;background:url(https://example.com/x)` made the
+  browser fetch that URL. Every `style` is now built from declarations
+  (`EexCharts.SVG.style/1`), and each declaration value, like every
+  CSS-valued presentation attribute (`fill`, `stroke`, `font-family`, …),
+  must pass `EexCharts.CSS.safe_value?/1` or is dropped. Ordinary colors,
+  `var()`, `color-mix()` and font stacks are unaffected. Each `style`
+  attribute now ends in `;`.
+- A malformed hex color such as `#ggg` no longer raises in gradient and
+  heatmap shading; it is shaded with `color-mix()` like any non-hex color.
+
+### Performance
+
+- Render time grows linearly with the number of points. Several loops read
+  the data, categories, labels or palette by position with `Enum.at/2` inside
+  a loop over positions, which made them quadratic: a 32,000-point smooth
+  line took about 36 s and a stacked bar of the same size about 39 s. They
+  now read from tuples (`EexCharts.Indexed`), and the squarified treemap keeps
+  its row's running min, max and sum instead of rescanning the row, so a zero
+  value no longer makes it quadratic. Those charts now render in 1-3 s.
+  Output is unchanged: the SVG goldens are byte-identical.
+- `EexCharts.SVG.esc/1` returns text with nothing to escape as is, instead of
+  running five replace passes over it.
 
 ## v0.1.1 — 2026-09-03
 

@@ -38,7 +38,9 @@ defmodule EexCharts.Config do
     |> deep_merge(type_defaults(type))
     |> deep_merge(EexCharts.Style.defaults(style, type))
     |> deep_merge(EexCharts.Charts.BarFamily.option_defaults(type, opts))
+    |> deep_merge(sparkline_defaults(opts))
     |> deep_merge(opts)
+    |> hide_sparkline_y_axis()
     |> Map.put(:style, style)
     |> Map.update!(:chart, &Map.put(&1, :type, type))
     |> EexCharts.Theme.apply(opts)
@@ -84,6 +86,9 @@ defmodule EexCharts.Config do
         # `"normal"` or `"100%"` (ApexCharts `chart.stackType`); see
         # EexCharts.Stacking for line/area stacking.
         stack_type: "normal",
+        # Strip axes, grid, legend, labels and padding so the chart fits a
+        # table cell (ApexCharts `chart.sparkline`); see `sparkline?/1`.
+        sparkline: %{enabled: false},
         offset_x: 0,
         offset_y: 0
       },
@@ -159,6 +164,23 @@ defmodule EexCharts.Config do
           border_color: "#fff"
         }
       },
+      # Direct labels at the end of line/area series that carry an
+      # `end_label` (see EexCharts.EndLabels). Not an ApexCharts option.
+      end_labels: %{
+        enabled: false,
+        avoid_overlap: true,
+        offset_x: 8,
+        min_gap: 2,
+        formatter: nil,
+        style: %{
+          font_size: 13,
+          font_weight: 600,
+          # nil = the series colour; one colour or a list indexed by series.
+          colors: nil,
+          font_family: nil,
+          font_metrics: nil
+        }
+      },
       grid: %{
         show: true,
         border_color: "#e0e0e0",
@@ -176,6 +198,14 @@ defmodule EexCharts.Config do
       xaxis: %{
         type: :category,
         categories: [],
+        # `:top` draws the labels above the plot; heatmap only (see
+        # EexCharts.Charts.Heatmap).
+        position: :bottom,
+        # Heatmap: categories marked by a small bar above their column, and
+        # that bar's style (`color` nil = `chart.fore_color`; `name` adds a
+        # legend entry next to the colour ranges).
+        marked: [],
+        marked_bar: %{color: nil, height: 4, name: nil},
         tick_placement: :on,
         min: nil,
         max: nil,
@@ -374,6 +404,14 @@ defmodule EexCharts.Config do
           radius: 2,
           shade_intensity: 0.5,
           distributed: false,
+          # true: the first series is the top row (ApexCharts: the bottom).
+          reverse_rows: false,
+          enable_shades: true,
+          # Table layout, see EexCharts.Charts.Heatmap.Rows.
+          row_groups: [],
+          group_gap: 12,
+          summary_rows: [],
+          summary_gap: 20,
           color_scale: %{ranges: [], min: nil, max: nil}
         },
         treemap: %{
@@ -395,6 +433,33 @@ defmodule EexCharts.Config do
           shade_intensity: 0.5,
           labels: %{orientation: :auto, padding: 4},
           total: %{show: true, label: "Total", formatter: nil}
+        },
+        level_meter: %{
+          layout: :auto,
+          segments: 5,
+          segment_width: nil,
+          segment_height: nil,
+          row_height: 44,
+          gap: 3,
+          radius: 2,
+          track: %{show: true, color: "#f2f2f2"},
+          distributed: false,
+          target: nil,
+          below_target_color: "#FEB019",
+          target_gap: 4,
+          gained_color: nil,
+          gained_opacity: 0.45,
+          lost: %{show: true, dash: "2 2", width: 1.5},
+          show_value: true,
+          value_label: %{
+            font_size: 12,
+            font_weight: 400,
+            color: nil,
+            formatter: nil,
+            show_previous: true
+          },
+          row_labels: %{show: true, font_size: 13, font_weight: 400, color: nil},
+          column_labels: %{show: true, font_size: 13, font_weight: 600, color: nil}
         },
         unit: %{
           layout: :grid,
@@ -651,6 +716,8 @@ defmodule EexCharts.Config do
   defp type_defaults(:range_bar) do
     %{
       chart: %{stacked: false},
+      # ApexCharts v4.7.0 `Defaults.rangeBar()` centres range bar labels.
+      plot_options: %{bar: %{data_labels: %{position: :center}}},
       data_labels: %{enabled: false, style: %{colors: ["#fff"]}, background: %{enabled: false}},
       stroke: %{width: 0, line_cap: :square},
       fill: %{opacity: 0.85},
@@ -691,6 +758,16 @@ defmodule EexCharts.Config do
       tooltip: %{enabled: false},
       legend: %{show: false},
       grid: %{show: false}
+    }
+  end
+
+  defp type_defaults(:level_meter) do
+    %{
+      data_labels: %{enabled: false},
+      fill: %{opacity: 1},
+      legend: %{show: false},
+      grid: %{show: false},
+      tooltip: %{shared: false, intersect: true}
     }
   end
 
@@ -773,6 +850,71 @@ defmodule EexCharts.Config do
   defp type_defaults(_), do: %{}
 
   @doc """
+  True when `chart.sparkline.enabled` is set.
+
+  A sparkline (ApexCharts v4.7.0 `chart.sparkline`) is a bare chart. The
+  options below become defaults under the user's own options, so each can be
+  switched back on (`data_labels: %{enabled: true}`, a `grid.padding` that
+  makes room for labels). As in ApexCharts, the first y-axis is hidden
+  regardless.
+
+    * `grid.show: false` and zero `grid.padding`
+    * `legend.show: false`
+    * `xaxis.labels`, `axis_border` and `axis_ticks` hidden
+    * `data_labels.enabled: false`
+    * `chart.parent_height_offset: 0`
+    * `chart.pixel_perfect: true`: the SVG keeps its `width` x `height`
+      instead of stretching to the container, and bar edges are snapped to
+      whole pixels (`shape-rendering="crispEdges"`)
+
+  `EexCharts.Layout` then gives the plot the whole SVG: no axis gutters, no
+  label band, no legend space. Only the stroke and the markers keep a margin
+  (half the stroke width at the top and bottom, the marker radius plus its
+  stroke on every side), so lines, bar edges and markers are not clipped at
+  sizes like 160 x 24. Annotations still render.
+
+  Supported: `:line`, `:area`, `:bar` (also distributed and per-point
+  `fill_color`), `:range_bar`, `:scatter`, `:pie`, `:donut`, `:radial_bar`.
+
+      chart: %{width: 160, height: 24, sparkline: %{enabled: true}}
+  """
+  def sparkline?(cfg), do: get_in(cfg, [:chart, :sparkline, :enabled]) == true
+
+  # ApexCharts `Defaults.sparkline()`, layered below the user's options.
+  defp sparkline_defaults(opts) do
+    if sparkline?(opts) do
+      %{
+        chart: %{parent_height_offset: 0, pixel_perfect: true},
+        grid: %{show: false, padding: %{top: 0, right: 0, bottom: 0, left: 0}},
+        legend: %{show: false},
+        xaxis: %{
+          labels: %{show: false},
+          axis_border: %{show: false},
+          axis_ticks: %{show: false}
+        },
+        data_labels: %{enabled: false}
+      }
+    else
+      %{}
+    end
+  end
+
+  # ApexCharts' `hideYAxis()` writes into the user's options, so the first
+  # y-axis is hidden even when they ask for it.
+  defp hide_sparkline_y_axis(cfg) do
+    if sparkline?(cfg) do
+      hide = &deep_merge(&1, %{show: false, labels: %{show: false}, title: %{text: nil}})
+
+      case cfg.yaxis do
+        [first | rest] -> %{cfg | yaxis: [hide.(first) | rest]}
+        %{} = axis -> %{cfg | yaxis: hide.(axis)}
+      end
+    else
+      cfg
+    end
+  end
+
+  @doc """
   Normalizes `cfg.yaxis` into a list of fully-populated axis maps.
 
   ApexCharts allows `yaxis` to be a single map or a list of axis maps; each
@@ -804,9 +946,30 @@ defmodule EexCharts.Config do
   def color_for(list, i) when is_list(list), do: Enum.at(list, rem(i, length(list)))
   def color_for(value, _i), do: value
 
-  @doc "Color for series/slice `i`, cycling through the configured palette."
+  @doc """
+  Color for series/slice `i`, cycling through the configured palette.
+
+  Reads the tuple `index_colors/1` stored when there is one, so a palette
+  with a color per data point does not cost a list walk per point.
+  """
+  def color_at(%{indexed_colors: colors}, i) when tuple_size(colors) > 0 do
+    elem(colors, rem(i, tuple_size(colors)))
+  end
+
   def color_at(cfg, i) do
     colors = colors(cfg)
     Enum.at(colors, rem(i, length(colors)))
+  end
+
+  @doc """
+  Stores the palette as a tuple for `color_at/2`. Call it once the config is
+  final: the renderer does so after every rewrite of `colors` (theme, static
+  `var()` resolution), so the tuple cannot go stale.
+  """
+  def index_colors(cfg) do
+    case colors(cfg) do
+      colors when is_list(colors) -> Map.put(cfg, :indexed_colors, List.to_tuple(colors))
+      _other -> cfg
+    end
   end
 end

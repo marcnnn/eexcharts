@@ -102,7 +102,13 @@ defmodule EexCharts.Charts.RadialBar do
     cx = box_w / 2 + rb.offset_x
     cy = box_h / 2 + rb.offset_y
 
-    size = default_size / 2.05 - cfg.stroke.width
+    # A sparkline does not shrink the rings by the stroke (ApexCharts
+    # `Radial.draw`).
+    size =
+      if EexCharts.Config.sparkline?(cfg),
+        do: default_size / 2.05,
+        else: default_size / 2.05 - cfg.stroke.width
+
     margin = rb.track.margin
 
     # Ring band thickness (Radial.getStrokeWidth).

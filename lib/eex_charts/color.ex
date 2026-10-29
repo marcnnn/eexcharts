@@ -16,7 +16,11 @@ defmodule EexCharts.Color do
   color (including `var(…)`) returns a `color-mix()` expression, so the blend
   survives a color whose value only the browser knows.
   """
-  def shade("#" <> _ = hex, percent) do
+  def shade(color, percent) when is_binary(color) do
+    if hex?(color), do: shade_hex(color, percent), else: shade_mix(color, percent)
+  end
+
+  defp shade_hex(hex, percent) do
     {r, g, b} = parse(hex)
     target = if percent < 0, do: 0, else: 255
     p = abs(percent)
@@ -28,7 +32,7 @@ defmodule EexCharts.Color do
     end)
   end
 
-  def shade(color, percent) when is_binary(color) do
+  defp shade_mix(color, percent) do
     # oklab keeps the mix perceptually even, which matters for the OKLCH
     # colors daisyUI themes are authored in. The hex path clamps out-of-range
     # channels; color-mix() needs the percentage clamped for the same reason
@@ -93,18 +97,29 @@ defmodule EexCharts.Color do
     |> then(fn [r, g, b] -> 0.2126 * r + 0.7152 * g + 0.0722 * b end)
   end
 
-  @doc "Parses `#rgb` or `#rrggbb` into `{r, g, b}`."
-  def parse("#" <> hex) when byte_size(hex) == 3 do
+  # Only a well-formed `#rgb` / `#rrggbb` is blended here; anything else,
+  # including a malformed hex such as `#ggg`, goes to color-mix().
+  defp hex?(color), do: Regex.match?(~r/\A#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\z/, color)
+
+  @doc """
+  Parses `#rgb` or `#rrggbb` into `{r, g, b}`. Anything else, malformed hex
+  included, returns the fallback gray `{55, 61, 63}`.
+  """
+  def parse(color) when is_binary(color) do
+    if hex?(color), do: parse_hex(color), else: {55, 61, 63}
+  end
+
+  def parse(_), do: {55, 61, 63}
+
+  defp parse_hex("#" <> hex) when byte_size(hex) == 3 do
     <<r::binary-1, g::binary-1, b::binary-1>> = hex
     {String.to_integer(r <> r, 16), String.to_integer(g <> g, 16), String.to_integer(b <> b, 16)}
   end
 
-  def parse("#" <> hex) when byte_size(hex) == 6 do
+  defp parse_hex("#" <> hex) do
     <<r::binary-2, g::binary-2, b::binary-2>> = hex
     {String.to_integer(r, 16), String.to_integer(g, 16), String.to_integer(b, 16)}
   end
-
-  def parse(_), do: {55, 61, 63}
 
   defp to_hex(c) do
     c |> max(0) |> min(255) |> Integer.to_string(16) |> String.pad_leading(2, "0")
