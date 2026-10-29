@@ -159,6 +159,23 @@ defmodule EexCharts.Config do
           border_color: "#fff"
         }
       },
+      # Direct labels at the end of line/area series that carry an
+      # `end_label` (see EexCharts.EndLabels). Not an ApexCharts option.
+      end_labels: %{
+        enabled: false,
+        avoid_overlap: true,
+        offset_x: 8,
+        min_gap: 2,
+        formatter: nil,
+        style: %{
+          font_size: 13,
+          font_weight: 600,
+          # nil = the series colour; one colour or a list indexed by series.
+          colors: nil,
+          font_family: nil,
+          font_metrics: nil
+        }
+      },
       grid: %{
         show: true,
         border_color: "#e0e0e0",

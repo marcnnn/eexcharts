@@ -119,6 +119,7 @@ defmodule EexCharts.Renderer do
   defp render_cartesian(cfg, params, id) do
     cfg = Stacking.prepare(cfg)
     {cfg, all_series} = prepare_series(cfg, normalize_series(params[:series]))
+    cfg = EexCharts.EndLabels.prepare(cfg, all_series)
     hidden = hidden_set(params)
     series = Enum.reject(all_series, &MapSet.member?(hidden, &1.index))
 
