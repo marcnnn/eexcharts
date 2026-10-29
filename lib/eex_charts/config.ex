@@ -201,6 +201,11 @@ defmodule EexCharts.Config do
         # `:top` draws the labels above the plot; heatmap only (see
         # EexCharts.Charts.Heatmap).
         position: :bottom,
+        # Heatmap: categories marked by a small bar above their column, and
+        # that bar's style (`color` nil = `chart.fore_color`; `name` adds a
+        # legend entry next to the colour ranges).
+        marked: [],
+        marked_bar: %{color: nil, height: 4, name: nil},
         tick_placement: :on,
         min: nil,
         max: nil,
@@ -401,6 +406,12 @@ defmodule EexCharts.Config do
           distributed: false,
           # true: the first series is the top row (ApexCharts: the bottom).
           reverse_rows: false,
+          enable_shades: true,
+          # Table layout, see EexCharts.Charts.Heatmap.Rows.
+          row_groups: [],
+          group_gap: 12,
+          summary_rows: [],
+          summary_gap: 20,
           color_scale: %{ranges: [], min: nil, max: nil}
         },
         treemap: %{
