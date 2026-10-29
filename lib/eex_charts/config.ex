@@ -176,6 +176,9 @@ defmodule EexCharts.Config do
       xaxis: %{
         type: :category,
         categories: [],
+        # `:top` draws the labels above the plot; heatmap only (see
+        # EexCharts.Charts.Heatmap).
+        position: :bottom,
         tick_placement: :on,
         min: nil,
         max: nil,
@@ -372,6 +375,8 @@ defmodule EexCharts.Config do
           radius: 2,
           shade_intensity: 0.5,
           distributed: false,
+          # true: the first series is the top row (ApexCharts: the bottom).
+          reverse_rows: false,
           color_scale: %{ranges: [], min: nil, max: nil}
         },
         treemap: %{
