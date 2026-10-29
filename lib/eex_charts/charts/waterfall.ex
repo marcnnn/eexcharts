@@ -30,15 +30,32 @@ defmodule EexCharts.Charts.Waterfall do
   given, the labels become the categories. Several series render side by side
   per category, each with its own running total.
 
-  The chart is vertical only; `plot_options.bar.horizontal` is ignored.
+  ## Horizontal
+
+  With `plot_options.bar.horizontal: true` the categories run down the left
+  edge, first point at the top (as for horizontal `:bar`), and the bars float
+  along a horizontal value axis. Connectors become vertical segments between
+  consecutive bars. Bar thickness comes from `plot_options.bar.bar_height`.
 
   ## Options (`plot_options.waterfall`)
 
-    * `colors` — `%{increase: "#00E396", decrease: "#FF4560", total: "#008FFB"}`
+    * `colors` - `%{increase: "#00E396", decrease: "#FF4560", total: "#008FFB"}`.
+      Each kind takes a colour, `:outline` (outline only, in that kind's
+      default colour) or a map `%{color: "#...", fill: %{type: :none |
+      :pattern, ...}}` (`color` optional; `fill` as in `EexCharts.PointStyle`).
+      A kind's fill sits between the point's own paint and the series `fill`.
     * `connector` — `%{show: true, color: "#a8a8a8", width: 1, dash_array: 3}`:
       a line from the end of each bar to the start of the next, at the running
       total they share.
     * `total_label` (`"Total"`) — tooltip label of the running-total row.
+    * `label_colors` (`nil`) - `%{increase:, decrease:, total:}` data label
+      colours on the bars of each kind; a missing kind uses
+      `data_labels.style.colors`.
+
+  Under `theme: %{mode: :daisy}` the kinds take `--color-success`,
+  `--color-error` and `--color-primary` and the connector `--color-base-300`,
+  unless set, and labels on those bars their `*-content` colour; the light
+  colours also read on the dark theme.
 
   Bar width, border radius and fill opacity come from `plot_options.bar` and
   `fill` as for `:bar`. Data labels show the change (or the total for total
@@ -50,6 +67,8 @@ defmodule EexCharts.Charts.Waterfall do
 
   alias EexCharts.{Charts, Config, Layout, PointStyle, Renderer}
 
+  @kind_colors %{increase: "#00E396", decrease: "#FF4560", total: "#008FFB"}
+
   @doc "Per-type config defaults."
   def type_defaults do
     %{
@@ -57,9 +76,10 @@ defmodule EexCharts.Charts.Waterfall do
       plot_options: %{
         bar: %{data_labels: %{position: :center}},
         waterfall: %{
-          colors: %{increase: "#00E396", decrease: "#FF4560", total: "#008FFB"},
+          colors: @kind_colors,
           connector: %{show: true, color: "#a8a8a8", width: 1, dash_array: 3},
-          total_label: "Total"
+          total_label: "Total",
+          label_colors: nil
         }
       },
       data_labels: %{style: %{colors: ["#fff"]}, background: %{enabled: false}},
@@ -139,8 +159,14 @@ defmodule EexCharts.Charts.Waterfall do
   """
   def positions(cfg, series, %Layout{} = l) do
     n_series = max(length(series), 1)
-    slot = l.grid_w / l.n
-    bar_w = slot / n_series * Charts.Bar.pct(cfg.plot_options.bar.column_width) / 100
+    bar_cfg = cfg.plot_options.bar
+
+    {origin, slot, thickness} =
+      if l.horizontal,
+        do: {l.grid_y, l.grid_h / l.n, bar_cfg.bar_height},
+        else: {l.grid_x, l.grid_w / l.n, bar_cfg.column_width}
+
+    bar_w = slot / n_series * Charts.Bar.pct(thickness) / 100
 
     series
     |> Enum.with_index()
@@ -149,23 +175,20 @@ defmodule EexCharts.Charts.Waterfall do
       |> Enum.with_index()
       |> Enum.flat_map(fn
         {%{y: [from, to]} = p, j} ->
-          y_from = Layout.y_for(l, clamp(l, from))
-          y_to = Layout.y_for(l, clamp(l, to))
+          {color, kind_fill} = kind_paint(cfg, p.kind)
+          start = origin + slot * j + (slot - bar_w * n_series) / 2 + bar_w * pos_i
 
           [
-            %{
+            bar_box(l, from, to, start, bar_w)
+            |> Map.merge(%{
               series: s.index,
               index: j,
-              x: l.grid_x + slot * j + (slot - bar_w * n_series) / 2 + bar_w * pos_i,
-              y: min(y_from, y_to),
-              w: bar_w,
-              h: abs(y_from - y_to),
               point: p,
-              color: color(cfg, p.kind),
+              color: color,
               positive: p.kind != :decrease,
               last_in_stack: true,
-              style: PointStyle.resolve(cfg, s, p, color(cfg, p.kind))
-            }
+              style: PointStyle.resolve(cfg, with_kind_fill(s, kind_fill), p, color)
+            })
           ]
 
         _ ->
@@ -173,6 +196,25 @@ defmodule EexCharts.Charts.Waterfall do
       end)
     end)
   end
+
+  # `start` is the bar's position on the category axis.
+  defp bar_box(%Layout{horizontal: true} = l, from, to, start, thickness) do
+    x_from = Layout.x_for(l, clamp(l, from))
+    x_to = Layout.x_for(l, clamp(l, to))
+    %{x: min(x_from, x_to), y: start, w: abs(x_to - x_from), h: thickness}
+  end
+
+  defp bar_box(l, from, to, start, thickness) do
+    y_from = Layout.y_for(l, clamp(l, from))
+    y_to = Layout.y_for(l, clamp(l, to))
+    %{x: start, y: min(y_from, y_to), w: thickness, h: abs(y_from - y_to)}
+  end
+
+  # A kind's own fill sits under the point's paint and over the series fill.
+  defp with_kind_fill(s, nil), do: s
+
+  defp with_kind_fill(s, kind_fill),
+    do: Map.put(s, :fill, Config.deep_merge(Map.get(s, :fill) || %{}, kind_fill))
 
   @doc "Renders bars and connectors; returns iodata."
   def render(cfg, series, %Layout{} = l, opts \\ []) do
@@ -192,7 +234,7 @@ defmodule EexCharts.Charts.Waterfall do
                 " "
               ),
             data_j: r.index,
-            d: Charts.Bar.bar_path(cfg, r, false),
+            d: Charts.Bar.bar_path(cfg, r, l.horizontal),
             fill: r.style.fill,
             fill_opacity: r.style.fill_opacity,
             stroke: r.style.stroke || Config.color_for(cfg.stroke.colors, i),
@@ -219,15 +261,22 @@ defmodule EexCharts.Charts.Waterfall do
   end
 
   @doc """
-  Connector segments `{x1, x2, y}` between consecutive bars of one series, at
-  the running total the first ends on and the second starts from.
+  Connector segments `{x1, y1, x2, y2}` between consecutive bars of one
+  series, at the running total the first ends on and the second starts from:
+  horizontal lines on a vertical chart, vertical ones on a horizontal chart.
   """
   def connector_segments(rects, %Layout{} = l) do
     rects
     |> Enum.sort_by(& &1.index)
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.map(fn [a, b] ->
-      {a.x + a.w, b.x, Layout.y_for(l, clamp(l, a.point.total))}
+      if l.horizontal do
+        x = Layout.x_for(l, clamp(l, a.point.total))
+        {x, a.y + a.h, x, b.y}
+      else
+        y = Layout.y_for(l, clamp(l, a.point.total))
+        {a.x + a.w, y, b.x, y}
+      end
     end)
   end
 
@@ -235,13 +284,13 @@ defmodule EexCharts.Charts.Waterfall do
     c = cfg.plot_options.waterfall.connector
 
     if c.show do
-      Enum.map(connector_segments(rects, l), fn {x1, x2, y} ->
+      Enum.map(connector_segments(rects, l), fn {x1, y1, x2, y2} ->
         el("line", %{
           class: "eexcharts-waterfall-connector",
           x1: x1,
-          y1: y,
+          y1: y1,
           x2: x2,
-          y2: y,
+          y2: y2,
           stroke: c.color,
           stroke_width: c.width,
           stroke_dasharray: if(c.dash_array && c.dash_array != 0, do: c.dash_array)
@@ -273,7 +322,7 @@ defmodule EexCharts.Charts.Waterfall do
               PointStyle.label_color(
                 cfg,
                 r.style,
-                Config.color_for(dl.style.colors, r.series) || r.color
+                label_on_bar(cfg, r)
               ),
             font_size: dl.style.font_size,
             font_weight: dl.style.font_weight,
@@ -284,6 +333,11 @@ defmodule EexCharts.Charts.Waterfall do
       end)
 
     el("g", %{class: "eexcharts-datalabels"}, labels)
+  end
+
+  defp label_on_bar(cfg, r) do
+    (cfg.plot_options.waterfall.label_colors || %{})[r.point.kind] ||
+      Config.color_for(cfg.data_labels.style.colors, r.series) || r.color
   end
 
   defp label_value(%{kind: :total, total: t}), do: t
@@ -321,7 +375,17 @@ defmodule EexCharts.Charts.Waterfall do
 
   def tooltip_rows(_cfg, _s, _p), do: []
 
-  defp color(cfg, kind), do: Map.fetch!(cfg.plot_options.waterfall.colors, kind)
+  defp color(cfg, kind), do: cfg |> kind_paint(kind) |> elem(0)
+
+  # `{colour, fill map or nil}` for a bar kind; `:outline` and a map without
+  # `:color` keep the kind's default colour.
+  defp kind_paint(cfg, kind) do
+    case Map.fetch!(cfg.plot_options.waterfall.colors, kind) do
+      :outline -> {@kind_colors[kind], %{type: :none}}
+      %{} = spec -> {spec[:color] || @kind_colors[kind], spec[:fill]}
+      color -> {color, nil}
+    end
+  end
 
   defp clamp(l, v), do: v |> max(l.scale.nice_min) |> min(l.scale.nice_max)
 end

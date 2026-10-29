@@ -60,7 +60,7 @@ defmodule EexCharts.Layout do
 
     horizontal =
       get_in(cfg, [:plot_options, :bar, :horizontal]) == true &&
-        cfg.chart.type in [:bar, :range_bar]
+        cfg.chart.type in [:bar, :range_bar, :waterfall]
 
     pad = cfg.grid.padding
 
