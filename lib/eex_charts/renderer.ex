@@ -1319,7 +1319,8 @@ defmodule EexCharts.Renderer do
   end
 
   # v4.7.0 lists a point's goals under its value.
-  defp goal_rows(cfg, s, j) do
+  @doc false
+  def goal_rows(cfg, s, j) do
     for g <- EexCharts.Goals.of(s, j) do
       tooltip_row(
         EexCharts.Goals.color(cfg, g),
