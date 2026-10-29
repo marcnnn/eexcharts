@@ -48,7 +48,7 @@ defmodule EexCharts.Charts.Waterfall do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, Layout, Renderer}
+  alias EexCharts.{Charts, Config, Layout, PointStyle, Renderer}
 
   @doc "Per-type config defaults."
   def type_defaults do
@@ -97,11 +97,16 @@ defmodule EexCharts.Charts.Waterfall do
   defp step(%{prepared: true} = p, _acc), do: {p, p.total}
 
   defp step(%{} = p, acc) do
-    if p[:total] == true or p[:subtotal] == true do
-      {point(p[:x], [0, acc], nil, acc, :total), acc}
-    else
-      step_value(p[:x], p[:y], acc)
-    end
+    {point, acc} =
+      if p[:total] == true or p[:subtotal] == true do
+        {point(p[:x], [0, acc], nil, acc, :total), acc}
+      else
+        step_value(p[:x], p[:y], acc)
+      end
+
+    # Per-point paint (`EexCharts.PointStyle`) rides along.
+    paint = Map.take(p, [:fill_color, :stroke_color, :fill])
+    {point && Map.merge(paint, point), acc}
   end
 
   defp step(v, acc), do: step_value(nil, v, acc)
@@ -128,7 +133,10 @@ defmodule EexCharts.Charts.Waterfall do
     end
   end
 
-  @doc "Every bar rectangle: `%{series, index, x, y, w, h, point, color, positive}`."
+  @doc """
+  Every bar rectangle: `%{series, index, x, y, w, h, point, color, positive,
+  style}`, `style` being the bar's `EexCharts.PointStyle` paint.
+  """
   def positions(cfg, series, %Layout{} = l) do
     n_series = max(length(series), 1)
     slot = l.grid_w / l.n
@@ -155,7 +163,8 @@ defmodule EexCharts.Charts.Waterfall do
               point: p,
               color: color(cfg, p.kind),
               positive: p.kind != :decrease,
-              last_in_stack: true
+              last_in_stack: true,
+              style: PointStyle.resolve(cfg, s, p, color(cfg, p.kind))
             }
           ]
 
@@ -168,7 +177,7 @@ defmodule EexCharts.Charts.Waterfall do
   @doc "Renders bars and connectors; returns iodata."
   def render(cfg, series, %Layout{} = l, opts \\ []) do
     on_click = opts[:on_click]
-    rects = positions(cfg, series, l)
+    {rects, defs} = cfg |> positions(series, l) |> PointStyle.link(opts[:id] || "eexcharts")
 
     rects
     |> Enum.group_by(& &1.series)
@@ -177,13 +186,17 @@ defmodule EexCharts.Charts.Waterfall do
       bars =
         Enum.map(rs, fn r ->
           attrs = %{
-            class: "eexcharts-bar eexcharts-waterfall-#{r.point.kind}",
+            class:
+              Enum.join(
+                ["eexcharts-bar eexcharts-waterfall-#{r.point.kind}" | List.wrap(r.style.class)],
+                " "
+              ),
             data_j: r.index,
             d: Charts.Bar.bar_path(cfg, r, false),
-            fill: r.color,
-            fill_opacity: cfg.fill.opacity,
-            stroke: Config.color_for(cfg.stroke.colors, i),
-            stroke_width: cfg.stroke.width
+            fill: r.style.fill,
+            fill_opacity: r.style.fill_opacity,
+            stroke: r.style.stroke || Config.color_for(cfg.stroke.colors, i),
+            stroke_width: r.style.stroke_width
           }
 
           attrs =
@@ -202,6 +215,7 @@ defmodule EexCharts.Charts.Waterfall do
 
       el("g", %{class: "eexcharts-series"}, [connectors(cfg, rs, l), bars])
     end)
+    |> then(&[defs, &1])
   end
 
   @doc """
@@ -255,7 +269,12 @@ defmodule EexCharts.Charts.Waterfall do
             y: r.y + r.h / 2 + dl.offset_y,
             text_anchor: "middle",
             dominant_baseline: "central",
-            fill: Config.color_for(dl.style.colors, r.series) || r.color,
+            fill:
+              PointStyle.label_color(
+                cfg,
+                r.style,
+                Config.color_for(dl.style.colors, r.series) || r.color
+              ),
             font_size: dl.style.font_size,
             font_weight: dl.style.font_weight,
             class: "eexcharts-datalabel"
