@@ -61,6 +61,46 @@ defmodule EexCharts.Charts.Heatmap do
   xaxis: %{position: :top}
   ```
 
+  ## Tables: groups, summary rows, marked columns
+
+  Options under `plot_options.heatmap` (row geometry in
+  `EexCharts.Charts.Heatmap.Rows`):
+
+    * `row_groups: [%{name:, rows: n}]` - each group takes the next `n`
+      rows from the top. Its name is drawn in bold in a column left of the
+      row names, level with its first row, and `group_gap` (default 12) px
+      separate the groups.
+    * `summary_rows: [%{name:, data:}]` - extra rows after the last row
+      (a column mean, a total), `summary_gap` (default 20) px below it with
+      a rule in the grid border colour in the middle. Names and values are
+      bold; the names start at the left edge of the label area. The cells
+      use the same colour scale as the other rows (series 0's hue without
+      ranges) unless their points set `fill_color`. A click on one sends
+      `summary` (its position) instead of `series`.
+    * `enable_shades: false` - colours come straight from the series or
+      the matching range, without the value's shade (ApexCharts
+      `enableShades`). Discrete `color_scale.ranges` read as a table this
+      way.
+
+  `xaxis.marked: [category, ...]` draws a small bar above each listed
+  column, above the x labels when they are on top. `xaxis.marked_bar` sets
+  its `color` (default `chart.fore_color`), `height` (4) and `name`: with a
+  name and colour ranges, the bar gets the first legend entry. Category
+  axes only.
+
+  ```elixir
+  xaxis: %{position: :top, marked: ["05", "06"], marked_bar: %{name: "Marked column"}},
+  plot_options: %{heatmap: %{
+    reverse_rows: true,
+    enable_shades: false,
+    row_groups: [%{name: "Group 1", rows: 4}, %{name: "Group 2", rows: 3}],
+    summary_rows: [%{name: "Summary row", data: means}],
+    color_scale: %{ranges: ranges}
+  }}
+  ```
+
+  All of it works with data labels off, for tables with many rows.
+
   Owns its full SVG assembly: `render_chart/3` returns the complete
   container (svg + tooltips).
   """
@@ -68,11 +108,18 @@ defmodule EexCharts.Charts.Heatmap do
   import EexCharts.SVG
 
   alias EexCharts.{Color, Config, LabelText, Layout, Legend, PointStyle, Renderer}
-  alias EexCharts.Charts.Heatmap.{GradientLegend, XLayout}
+  alias EexCharts.Charts.Heatmap.{GradientLegend, Rows, XLayout}
 
   # WCAG AA for normal text: the floor below which a label on a cell's own
   # `fill_color` switches to white or dark grey.
   @label_contrast 4.5
+
+  # Space between the group label column and the row labels.
+  @group_pad 16
+
+  # Bold text runs about 8% wider than the regular weight `text_width/2`
+  # measures (Helvetica / Arial).
+  @bold_factor 1.08
 
   @doc "Renders the complete heatmap container."
   def render_chart(cfg, params, id) do
@@ -169,12 +216,25 @@ defmodule EexCharts.Charts.Heatmap do
     x_font = cfg.xaxis.labels.style.font_size
     pad = cfg.grid.padding
 
-    left_w =
-      if cfg.yaxis.show and cfg.yaxis.labels.show and names != [] do
+    heat = cfg.plot_options.heatmap
+    labels? = cfg.yaxis.show and cfg.yaxis.labels.show
+
+    name_w =
+      if labels? and names != [] do
         names |> Enum.map(&Layout.text_width(&1, y_font)) |> Enum.max()
       else
         0
       end
+
+    # Group names get a column of their own left of the row names; summary
+    # names start at that column's left edge and may span both.
+    group_w = if labels?, do: bold_width(Enum.map(heat.row_groups, & &1[:name]), y_font), else: 0
+    group_w = if group_w > 0, do: group_w + @group_pad, else: 0
+
+    summary_w =
+      if labels?, do: bold_width(Enum.map(heat.summary_rows, & &1[:name]), y_font), else: 0
+
+    left_w = max(group_w + name_w, summary_w)
 
     x_tick_h = if value_x? and cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
     x_axis_h = if cfg.xaxis.labels.show, do: x_font + 12 + x_tick_h, else: 4 + x_tick_h
@@ -183,12 +243,16 @@ defmodule EexCharts.Charts.Heatmap do
     # top legend; the bottom keeps a small margin.
     {top_axis_h, x_label_h} = if top_axis?(cfg), do: {x_axis_h, 4}, else: {0, x_axis_h}
 
+    # Marked columns: a band for their bars above the axis band (or the plot).
+    marked = if value_x?, do: [], else: cfg.xaxis.marked
+    mark_h = if marked != [], do: cfg.xaxis.marked_bar.height + 4, else: 0
+
     top_legend_h = if(legend_pos == :top, do: legend_h, else: 0) + g_top
     bottom_legend_h = if(legend_pos == :bottom, do: legend_h, else: 0) + g_bottom
     right_legend_w = if(legend_pos == :right, do: (legend && legend.w) || 0, else: 0) + g_right
 
     grid_x = pad.left + left_w + if(left_w > 0, do: 10, else: 0)
-    grid_y = title_h + top_legend_h + pad.top + 6 + top_axis_h
+    grid_y = title_h + top_legend_h + pad.top + 6 + mark_h + top_axis_h
     grid_w = max(w - grid_x - pad.right - right_legend_w, 10)
     grid_h = max(h - grid_y - x_label_h - pad.bottom - bottom_legend_h, 10)
 
@@ -211,18 +275,21 @@ defmodule EexCharts.Charts.Heatmap do
         l
       end
 
+    rows = Rows.layout(cfg, all_series, series, grid_y, grid_h)
+
     cells =
       if value_x? do
-        value_cells(cfg, series, points, xs, x_step, l, ranges, ctx)
+        value_cells(cfg, rows.rows, xs, x_step, l, ranges, ctx)
       else
-        category_cells(cfg, series, categories, n_cats, l, ranges, ctx)
+        category_cells(cfg, rows.rows, categories, n_cats, l, ranges, ctx)
       end
 
     {cells, pattern_defs} = PointStyle.link(cells, id)
 
     # Legends place themselves against the plot's top edge; with the axis on
     # top they belong above the axis band.
-    legend_l = %{l | grid_y: l.grid_y - top_axis_h, grid_h: l.grid_h + top_axis_h}
+    above = top_axis_h + mark_h
+    legend_l = %{l | grid_y: l.grid_y - above, grid_h: l.grid_h + above}
 
     svg =
       Renderer.svg_open(cfg, l, id, [
@@ -231,31 +298,38 @@ defmodule EexCharts.Charts.Heatmap do
         pattern_defs,
         cell_rects(cfg, cells, params),
         data_labels(cfg, cells),
-        series_labels(cfg, series, l, n_vis),
+        summary_rule(cfg, rows.rule_y, l),
+        series_labels(cfg, rows.rows, l),
+        group_labels(cfg, rows.groups),
         if(value_x?,
           do: value_x_labels(cfg, l),
           else: category_labels(cfg, categories, l, n_cats)
         ),
-        legend_io(cfg, legend_l, legend, ranges, legend_pos, legend_h, hidden, params),
+        marked_bars(cfg, marked, categories, l, l.grid_y - above),
+        legend_io(
+          cfg,
+          legend_l,
+          legend,
+          legend_ranges(cfg, ranges, marked),
+          legend_pos,
+          legend_h,
+          hidden,
+          params
+        ),
         gradient_legend(gradient, cfg, legend_l, id, series, ctx)
       ])
 
     Renderer.container(cfg, params, id, svg, tooltips(cfg, cells))
   end
 
-  defp category_cells(cfg, series, categories, n_cats, l, ranges, ctx) do
-    %Layout{grid_x: grid_x, grid_y: grid_y, grid_w: grid_w, grid_h: grid_h} = l
-    n_vis = length(series)
+  defp category_cells(cfg, rows, categories, n_cats, l, ranges, ctx) do
+    %Layout{grid_x: grid_x, grid_w: grid_w} = l
 
     cells =
-      if n_vis > 0 and n_cats > 0 do
-        y_div = grid_h / n_vis
+      if n_cats > 0 do
         x_div = grid_w / n_cats
 
-        series
-        |> Enum.with_index()
-        |> Enum.flat_map(fn {s, p} ->
-          y = grid_y + row_index(cfg, p, n_vis) * y_div
+        Enum.flat_map(rows, fn %{series: s, y: y, h: y_div} ->
           {color_fn, fore_fn} = cell_color_fns(cfg, s, ranges, ctx)
 
           0..(n_cats - 1)
@@ -282,22 +356,20 @@ defmodule EexCharts.Charts.Heatmap do
 
   # Value x-axis: each cell spans its `XLayout.extents/2` interval, clipped
   # to the axis domain; `j` is the column's index among the distinct x values.
-  defp value_cells(_cfg, [], _points, _xs, _step, _l, _ranges, _ctx), do: []
+  defp value_cells(_cfg, [], _xs, _step, _l, _ranges, _ctx), do: []
 
-  defp value_cells(cfg, series, points, xs, step, l, ranges, ctx) do
-    n_vis = length(series)
-    y_div = l.grid_h / n_vis
+  defp value_cells(cfg, rows, xs, step, l, ranges, ctx) do
     extents = XLayout.extents(xs, step)
     col = xs |> Enum.with_index() |> Map.new()
     %{nice_min: lo, nice_max: hi} = l.x_scale
 
-    series
-    |> Enum.with_index()
-    |> Enum.flat_map(fn {s, p} ->
-      y = l.grid_y + row_index(cfg, p, n_vis) * y_div
+    Enum.flat_map(rows, fn %{series: s, y: y, h: y_div} ->
       {color_fn, fore_fn} = cell_color_fns(cfg, s, ranges, ctx)
 
-      for {x, v, point} <- points[s.index],
+      # A summary row's x values may fall between the columns; those cells
+      # are left out.
+      for {x, v, point} <- XLayout.points(cfg, s.data),
+          extents[x] != nil,
           {left, right} = extents[x],
           left = max(left, lo),
           right = min(right, hi),
@@ -324,6 +396,8 @@ defmodule EexCharts.Charts.Heatmap do
 
     Map.merge(geometry, %{
       series: s.index,
+      key: Map.get(s, :key, s.index),
+      summary: s[:summary],
       value: v,
       color: color,
       fore: fore_fn.(v),
@@ -332,12 +406,6 @@ defmodule EexCharts.Charts.Heatmap do
       style: PointStyle.resolve(cfg, s, point, color),
       label: point_label(point)
     })
-  end
-
-  # Grid row of the p-th visible series: series 0 sits at the bottom
-  # (ApexCharts draws bottom-up) unless `reverse_rows` puts it on top.
-  defp row_index(cfg, p, n_vis) do
-    if get_in(cfg, [:plot_options, :heatmap, :reverse_rows]), do: p, else: n_vis - 1 - p
   end
 
   defp top_axis?(cfg), do: cfg.xaxis.position == :top
@@ -377,7 +445,7 @@ defmodule EexCharts.Charts.Heatmap do
       Enum.map(cells, fn %{style: style} = c ->
         attrs = %{
           class: rect_class(style),
-          data_j: "#{c.series}-#{c.j}",
+          data_j: "#{c.key}-#{c.j}",
           x: c.x,
           y: c.y,
           width: c.w,
@@ -389,23 +457,30 @@ defmodule EexCharts.Charts.Heatmap do
           stroke_width: style.stroke_width
         }
 
-        attrs =
-          if on_click do
-            Map.merge(attrs, %{
-              "phx-click" => on_click,
-              "phx-value-index" => c.j,
-              "phx-value-series" => c.series,
-              cursor: "pointer"
-            })
-          else
-            attrs
-          end
+        attrs = if on_click, do: Map.merge(attrs, click_attrs(on_click, c)), else: attrs
 
         el("rect", attrs)
       end)
 
     el("g", %{class: "eexcharts-heatmap"}, rects)
   end
+
+  # A summary cell reports its summary row instead of a series.
+  defp click_attrs(on_click, %{summary: nil} = c),
+    do: %{
+      "phx-click" => on_click,
+      "phx-value-index" => c.j,
+      "phx-value-series" => c.series,
+      cursor: "pointer"
+    }
+
+  defp click_attrs(on_click, c),
+    do: %{
+      "phx-click" => on_click,
+      "phx-value-index" => c.j,
+      "phx-value-summary" => c.summary,
+      cursor: "pointer"
+    }
 
   defp rect_class(%{class: nil}), do: "eexcharts-heatmap-rect"
   defp rect_class(%{class: class}), do: "eexcharts-heatmap-rect " <> class
@@ -419,9 +494,11 @@ defmodule EexCharts.Charts.Heatmap do
     base = Config.color_at(cfg, s.index)
     default_fore = data_label_color(cfg)
 
+    shades? = cfg.plot_options.heatmap.enable_shades
+
     color_fn = fn v ->
       {color, _fore, percent} = determine_color(base, v, ranges, ctx, default_fore)
-      Color.shade(color, shade_percent(percent, ctx))
+      if shades?, do: Color.shade(color, shade_percent(percent, ctx)), else: color
     end
 
     fore_fn = fn v ->
@@ -492,7 +569,7 @@ defmodule EexCharts.Charts.Heatmap do
               dominant_baseline: "central",
               fill: cell_label_color(cfg, c),
               font_size: style.font_size,
-              font_weight: style.font_weight,
+              font_weight: if(c.summary, do: 700, else: style.font_weight),
               class: "eexcharts-datalabel"
             },
             cell_label(cfg, c, x)
@@ -546,28 +623,30 @@ defmodule EexCharts.Charts.Heatmap do
 
   # ── Axis labels ───────────────────────────────────────────────────────────
 
-  defp series_labels(cfg, series, l, n_vis) do
-    if cfg.yaxis.show and cfg.yaxis.labels.show and n_vis > 0 do
+  # Row names right-aligned against the plot; summary names in bold from the
+  # left edge of the label area (the group column, if any).
+  defp series_labels(cfg, rows, l) do
+    if cfg.yaxis.show and cfg.yaxis.labels.show and rows != [] do
       style = cfg.yaxis.labels.style
       color = label_color(style.colors, cfg.chart.fore_color)
-      y_div = l.grid_h / n_vis
 
       labels =
-        series
-        |> Enum.with_index()
-        |> Enum.map(fn {s, p} ->
-          y = l.grid_y + row_index(cfg, p, n_vis) * y_div + y_div / 2
+        Enum.map(rows, fn %{series: s, y: y, h: h} ->
+          {x, anchor, weight} =
+            if s[:summary],
+              do: {cfg.grid.padding.left, "start", 700},
+              else: {l.grid_x - 8, "end", style.font_weight}
 
           el(
             "text",
             %{
-              x: l.grid_x - 8,
-              y: y,
-              text_anchor: "end",
+              x: x,
+              y: y + h / 2,
+              text_anchor: anchor,
               dominant_baseline: "central",
               fill: color,
               font_size: style.font_size,
-              font_weight: style.font_weight
+              font_weight: weight
             },
             esc(s.name)
           )
@@ -577,6 +656,74 @@ defmodule EexCharts.Charts.Heatmap do
     else
       []
     end
+  end
+
+  # Group names in bold at the left edge, level with each group's first row.
+  defp group_labels(cfg, groups) do
+    if cfg.yaxis.show and cfg.yaxis.labels.show and groups != [] do
+      style = cfg.yaxis.labels.style
+      color = label_color(style.colors, cfg.chart.fore_color)
+
+      labels =
+        Enum.map(groups, fn g ->
+          el(
+            "text",
+            %{
+              x: cfg.grid.padding.left,
+              y: g.y,
+              text_anchor: "start",
+              dominant_baseline: "central",
+              fill: color,
+              font_size: style.font_size,
+              font_weight: 700
+            },
+            esc(g.name)
+          )
+        end)
+
+      el("g", %{class: "eexcharts-heatmap-groups"}, labels)
+    else
+      []
+    end
+  end
+
+  # The rule between the last row and the summary rows spans the label area
+  # and the plot, in the grid border colour so themes recolour it.
+  defp summary_rule(_cfg, nil, _l), do: []
+
+  defp summary_rule(cfg, y, l) do
+    el("line", %{
+      class: "eexcharts-heatmap-rule",
+      x1: cfg.grid.padding.left,
+      x2: l.grid_x + l.grid_w,
+      y1: y,
+      y2: y,
+      stroke: cfg.grid.border_color,
+      stroke_width: 1
+    })
+  end
+
+  # A bar centred over each marked column, three quarters of its width, at
+  # the top of the band reserved above the axis labels.
+  defp marked_bars(_cfg, [], _categories, _l, _y), do: []
+
+  defp marked_bars(cfg, marked, categories, l, y) do
+    x_div = l.grid_w / max(length(categories), 1)
+    bar = cfg.xaxis.marked_bar
+    wanted = MapSet.new(marked, &to_string/1)
+
+    bars =
+      for {c, j} <- Enum.with_index(categories), MapSet.member?(wanted, c) do
+        el("rect", %{
+          x: l.grid_x + (j + 0.125) * x_div,
+          y: y,
+          width: 0.75 * x_div,
+          height: bar.height,
+          fill: bar.color || cfg.chart.fore_color
+        })
+      end
+
+    el("g", %{class: "eexcharts-heatmap-marked"}, bars)
   end
 
   defp category_labels(cfg, categories, l, n_cats) do
@@ -664,6 +811,20 @@ defmodule EexCharts.Charts.Heatmap do
 
   # ── Legend ────────────────────────────────────────────────────────────────
 
+  # A named marked-column bar joins the colour-range legend as its first
+  # entry; the series legend has no place for it.
+  defp legend_ranges(cfg, [_ | _] = ranges, [_ | _]) do
+    case cfg.xaxis.marked_bar do
+      %{name: nil} ->
+        ranges
+
+      %{name: name, color: color} ->
+        [%{name: to_string(name), color: color || cfg.chart.fore_color} | ranges]
+    end
+  end
+
+  defp legend_ranges(_cfg, ranges, _marked), do: ranges
+
   defp legend_io(_cfg, _l, nil, [], _pos, _lh, _hidden, _params), do: []
 
   # Ranges present: render swatches ourselves (range name + color).
@@ -742,7 +903,7 @@ defmodule EexCharts.Charts.Heatmap do
     if cfg.tooltip.enabled do
       tips =
         Enum.map(cells, fn c ->
-          el("div", %{class: "eexcharts-tip", data_j: "#{c.series}-#{c.j}", hidden: true}, [
+          el("div", %{class: "eexcharts-tip", data_j: "#{c.key}-#{c.j}", hidden: true}, [
             el("div", %{class: "eexcharts-tip-title"}, esc(to_string(c.category))),
             Renderer.tooltip_row(tip_color(c), c.name, Renderer.format_tooltip_y(cfg, c.value))
           ])
@@ -752,6 +913,13 @@ defmodule EexCharts.Charts.Heatmap do
     else
       []
     end
+  end
+
+  defp bold_width(texts, font) do
+    texts
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&(Layout.text_width(to_string(&1), font) * @bold_factor))
+    |> Enum.max(fn -> 0 end)
   end
 
   defp tip_color(%{point: %{fill_color: fill}}) when is_binary(fill), do: fill
