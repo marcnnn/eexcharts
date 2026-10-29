@@ -678,6 +678,8 @@ defmodule EexCharts.Config do
   defp type_defaults(:range_bar) do
     %{
       chart: %{stacked: false},
+      # ApexCharts v4.7.0 `Defaults.rangeBar()` centres range bar labels.
+      plot_options: %{bar: %{data_labels: %{position: :center}}},
       data_labels: %{enabled: false, style: %{colors: ["#fff"]}, background: %{enabled: false}},
       stroke: %{width: 0, line_cap: :square},
       fill: %{opacity: 0.85},
