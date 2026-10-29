@@ -4,7 +4,10 @@ defmodule EexCharts.Charts.Heatmap do
   `common/treemap/Helpers` color logic.
 
   Each series is a row (name = y label); `data` holds one number per x
-  category. Cells form a grid: row height is `grid_h / n_series`, cell width
+  category, or one `%{x: category, y: value}` point per category as in
+  ApexCharts. With points and no `xaxis.categories`, the first series' `x`
+  values name the columns. A cell without a numeric value is left empty.
+  Cells form a grid: row height is `grid_h / n_series`, cell width
   is `grid_w / n_categories`. A cell's color is the series color shaded by the
   value's intensity within the series' `min..max` range (see
   `plot_options.heatmap.shade_intensity`), or — when
@@ -33,14 +36,22 @@ defmodule EexCharts.Charts.Heatmap do
 
   @doc "Renders the complete heatmap container."
   def render_chart(cfg, params, id) do
+    value_x? = XLayout.value_axis?(cfg)
+
+    # A value x-axis resolves points itself (XLayout.points/2); category
+    # columns take one plain number per cell.
     all_series = Renderer.normalize_series(params[:series])
+
+    {all_series, cfg} =
+      if value_x?,
+        do: {all_series, cfg},
+        else: {Enum.map(all_series, &cell_values/1), put_point_categories(cfg, params[:series])}
+
     hidden = Renderer.hidden_set(params)
     series = Enum.reject(all_series, &MapSet.member?(hidden, &1.index))
 
     names = Enum.map(all_series, & &1.name)
     n_vis = length(series)
-
-    value_x? = XLayout.value_axis?(cfg)
 
     # Value x-axis: every series resolved to `{x, y}` points; the distinct x
     # values across all series (hidden ones too) become the columns.
@@ -329,6 +340,22 @@ defmodule EexCharts.Charts.Heatmap do
 
     {color_fn, fore_fn}
   end
+
+  defp cell_values(s), do: %{s | data: Enum.map(s.data, &cell_value/1)}
+
+  defp cell_value(v) when is_number(v), do: v
+  defp cell_value(%{y: y}) when is_number(y), do: y
+  defp cell_value(_), do: nil
+
+  # ApexCharts heatmaps take `{x, y}` points and read the column names from
+  # the first series' `x` values.
+  defp put_point_categories(%{xaxis: %{categories: []}} = cfg, [%{data: [_ | _] = data} | _]) do
+    if Enum.all?(data, &match?(%{x: _}, &1)),
+      do: put_in(cfg, [:xaxis, :categories], Enum.map(data, & &1.x)),
+      else: cfg
+  end
+
+  defp put_point_categories(cfg, _series), do: cfg
 
   # Port of `determineColor`: returns `{color, fore_color, percent}`.
   defp determine_color(base, v, ranges, ctx, default_fore) do

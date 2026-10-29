@@ -6,7 +6,7 @@ below was reproduced — or refuted — against this code, and each is pinned by
 test in [`test/edge_cases_test.exs`](https://github.com/marcnnn/eexcharts/blob/main/test/edge_cases_test.exs), which runs as
 part of `mix test`.
 
-**Open: none.** All six defects found by the audit are fixed.
+**Open: none.** All ten defects found so far are fixed.
 
 ## Fixed defects
 
@@ -21,6 +21,10 @@ reproduced it is now a regression test.
 | 4 | `plot_options.bar.data_labels.position` only honoured `:center`; `:top` and `:bottom` were identical, and negative bars got their label at the value end (below the bar) in every mode. | `renderer.ex` — `bar_label_pos/3` resolves the position against the rect's edges, so the top edge of a bar hanging below zero is the zero line. |
 | 5 | `TimeScale.ticks/3` raised `ArithmeticError` on non-integer millisecond bounds, because `ceil_div/2` calls `Kernel.div/2`. Reachable from the public API via a float `xaxis.min`. | `time_scale.ex` — `ticks/3` normalizes its bounds to whole milliseconds once, at the entry point, which also covers the month and year generators. |
 | 6 | A datetime chart crossing midnight gave no date context: hour ticks were labelled `HH:mm` only, so `20:00 … 00:00 … 04:00` never said which day a point belonged to. | `time_scale.ex` — `label_ticks/2` promotes the first sub-day tick of a new day to a date label. The first tick in a range keeps its time. |
+| 7 | Values near the float limit raised `ArithmeticError` in every chart type: the BEAM raises on float overflow, so `max - min` of `±1.0e308` or a pie total of two such values failed. Values too small or too close together for a scale (`1.0e-300`, denormals, `1.0` vs `1.0 + ε`, `1.0e-20` vs `2.0e-20`) divided by zero, and labels from about `1e250` up raised in `float_to_binary/2`. | `numbers.ex` — series and categories are clamped to `±1.0e100` and magnitudes below `1.0e-100` become `0.0` before rendering; `scale.ex` clamps a forced `min`/`max` the same way, treats a range below the float precision at its magnitude as degenerate and never builds fewer than one interval; `svg.ex` — `fmt_value/1` prints values from `1e21` up in exponent form, as JavaScript does. |
+| 8 | A logarithmic y-axis over values `<= 0` raised `ArithmeticError`: every log was 0, so the scale's log range was 0 and `y_for/3` divided by it. | `layout.ex` — `y_for/3` and `x_for/2` place a value at the start of a zero-length range instead of dividing. |
+| 9 | Datetime values outside the years `DateTime` supports raised in `DateTime.from_unix!/2` (tick labels and month ticks). | `time_scale.ex` — timestamps are clamped to years -9000..9000, at `to_ms/1`, at the tick generator's bounds and before every `from_unix`. |
+| 10 | Heatmap data in ApexCharts' `{x, y}` point form raised `ArithmeticError` (the map reached the color math), as did any non-numeric cell. | `heatmap.ex` — points are read as their `y`; with no `xaxis.categories` the first series' `x` values name the columns; a cell without a numeric value is left empty. |
 
 Defect 3 also moved one committed golden (`test/snapshots/n1.svg`): a scatter
 point previously drawn at `cx="590.32"`, past the grid's right edge at 590, now
@@ -52,5 +56,5 @@ guard test in the same file.
 | Bucket | Count |
 | --- | --- |
 | Open defects | 0 |
-| Fixed defects, pinned by regression tests | 6 |
+| Fixed defects, pinned by regression tests | 10 |
 | Behaviors pinned by guard tests | 12 |

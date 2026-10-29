@@ -9,6 +9,7 @@ defmodule EexCharts.Scale do
   """
 
   @js_precision 1.0e-11
+  @min_relative_range 1.0e-12
 
   # Hard ceiling on the intervals a forced step may produce. Far above any
   # axis anyone can read; it exists only so a pathological step cannot build
@@ -89,8 +90,8 @@ defmodule EexCharts.Scale do
     # and fall back to the computed nice step.
     got_step_size = is_number(opts[:step_size]) and opts[:step_size] > 0
 
-    y_min = if got_min, do: opts[:min], else: y_min
-    y_max = if got_max, do: opts[:max], else: y_max
+    y_min = clamp_input(if got_min, do: opts[:min], else: y_min)
+    y_max = clamp_input(if got_max, do: opts[:max], else: y_max)
 
     ticks =
       if got_tick_amount do
@@ -110,12 +111,16 @@ defmodule EexCharts.Scale do
         {y_min, y_max}
       end
 
-    # Sanity: swap inverted, expand degenerate ranges.
+    # Sanity: swap inverted, expand degenerate ranges. A range too narrow
+    # for the float precision at that magnitude counts as degenerate too:
+    # its step rounds to nothing and the tick count to zero.
+    {y_min, y_max} = if y_min > y_max, do: {y_max, y_min}, else: {y_min, y_max}
+
     {y_min, y_max} =
       cond do
-        y_min > y_max -> {y_max, y_min}
         y_min == y_max and y_min == 0 -> {0, 2}
-        y_min == y_max -> {y_min - 1, y_max + 1}
+        y_min == y_max -> {y_min - pad(y_min), y_max + pad(y_max)}
+        y_max - y_min <= max(abs(y_min), abs(y_max)) * @min_relative_range -> widen(y_min, y_max)
         true -> {y_min, y_max}
       end
 
@@ -161,7 +166,9 @@ defmodule EexCharts.Scale do
           min2 = step * ffloor(y_min / step)
           max2 = step * fceil(y_max / step)
           range2 = abs(max2 - min2)
-          tiks = ceil((range2 - @js_precision) / (step + @js_precision))
+          # The precision terms are absolute, so a range below ~1e-11
+          # rounds to zero ticks; one interval is the least that draws.
+          tiks = max(ceil((range2 - @js_precision) / (step + @js_precision)), 1)
           tiks = if tiks > 16 and length(prime_factors(tiks)) < 2, do: tiks + 1, else: tiks
           {min2, max2, range2 / tiks, tiks}
       end
@@ -289,6 +296,7 @@ defmodule EexCharts.Scale do
   def linear_scale(x, x, _ticks, _step), do: {[x], x, x}
 
   def linear_scale(x_min, x_max, ticks, step) do
+    {x_min, x_max} = {clamp_input(x_min), clamp_input(x_max)}
     range = abs(x_max - x_min)
 
     # A forced step is authoritative: derive the tick count from it so the last
@@ -387,6 +395,19 @@ defmodule EexCharts.Scale do
       |> String.to_float()
 
     if stripped == trunc(stripped) and abs(stripped) < 1.0e15, do: trunc(stripped), else: stripped
+  end
+
+  # User-forced `min`/`max` bypass the data clamp in `EexCharts.Numbers`, so
+  # the scale applies it to its own inputs as well.
+  defp clamp_input(v), do: EexCharts.Numbers.clamp(v)
+
+  # ±1 around an equal-valued range, as ApexCharts does. Past 1e9 that is
+  # below the float spacing, so grow it with the value instead.
+  defp pad(v), do: max(1, abs(v) * 1.0e-9)
+
+  defp widen(y_min, y_max) do
+    mid = y_min / 2 + y_max / 2
+    {mid - pad(mid), mid + pad(mid)}
   end
 
   defp ffloor(v), do: :math.floor(v)

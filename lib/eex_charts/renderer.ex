@@ -41,6 +41,11 @@ defmodule EexCharts.Renderer do
     params = if params[:static], do: staticize_params(params), else: params
     {type, params} = Charts.BarFamily.resolve(type, params)
 
+    params =
+      params
+      |> Map.update(:series, nil, &EexCharts.Numbers.sanitize/1)
+      |> Map.update(:categories, nil, &EexCharts.Numbers.sanitize/1)
+
     opts =
       (params[:options] || %{})
       |> put_if(params[:width], [:chart, :width])

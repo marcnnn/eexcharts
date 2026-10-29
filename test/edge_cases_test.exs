@@ -169,6 +169,111 @@ defmodule EexCharts.EdgeCasesTest do
   # Guard tests — currently-correct behavior worth pinning. Keep them green.
   # ──────────────────────────────────────────────────────────────────────────
 
+  describe "extreme magnitudes raise instead of rendering" do
+    @huge 1.0e308
+
+    test "every chart type renders values near the float limit" do
+      cases = [
+        {:line, [%{name: "A", data: [@huge, -@huge]}]},
+        {:area, [%{name: "A", data: [@huge, 1.7e308]}]},
+        {:bar, [%{name: "A", data: [@huge, -@huge]}]},
+        {:scatter, [%{name: "A", data: [[@huge, 1], [-@huge, 2]]}]},
+        {:bubble, [%{name: "A", data: [[1, 2, @huge], [2, 3, 1]]}]},
+        {:pie, [@huge, @huge]},
+        {:radial_bar, [@huge]},
+        {:radar, [%{name: "A", data: [@huge, -@huge, 1]}]},
+        {:heatmap, [%{name: "A", data: [@huge, -@huge]}]},
+        {:treemap, [%{data: [@huge, @huge]}]},
+        {:candlestick, [%{data: [%{x: "a", y: [@huge, @huge, -@huge, 1]}]}]},
+        {:box_plot, [%{data: [%{x: "a", y: [-@huge, 1, 2, 3, @huge]}]}]},
+        {:range_bar, [%{data: [%{x: "a", y: [-@huge, @huge]}]}]}
+      ]
+
+      for {type, series} <- cases do
+        assert html("s", type, series, []) =~ "eexcharts-svg", "#{type} did not render"
+      end
+    end
+
+    test "stacked sums of huge values render" do
+      series = [%{name: "A", data: [@huge]}, %{name: "B", data: [@huge]}]
+      assert html("s", :bar, series, options: %{chart: %{stacked: true}}) =~ "eexcharts-svg"
+    end
+
+    test "a forced y-axis min and max at the float limit render" do
+      svg =
+        html("s", :line, [%{name: "A", data: [1, 2]}],
+          options: %{yaxis: %{min: -@huge, max: @huge}}
+        )
+
+      assert svg =~ "eexcharts-svg"
+    end
+
+    test "values too small or too close together for a scale render" do
+      for data <- [
+            [1.0e-300, 2.0e-300],
+            [5.0e-324, 1.0e-323],
+            [1.0, 1.0 + 2.220446049250313e-16],
+            [1.0e-20, 2.0e-20]
+          ] do
+        assert html("s", :line, [%{name: "A", data: data}], []) =~ "eexcharts-svg",
+               "#{inspect(data)} did not render"
+      end
+    end
+
+    test "huge values are labelled in exponent form" do
+      assert SVG.fmt_value(1.0e300) == "1.0e300"
+      assert SVG.fmt_value(1.0e21) == "1.0e21"
+      assert SVG.fmt_value(1.0e20) == "100000000000000000000.0"
+    end
+  end
+
+  describe "a logarithmic y-axis over values <= 0" do
+    test "renders instead of dividing by a zero range" do
+      for data <- [[0, -5, 10], [0, 0], [-1, -2]] do
+        svg =
+          html("s", :line, [%{name: "A", data: data}], options: %{yaxis: %{logarithmic: true}})
+
+        assert svg =~ "eexcharts-svg", "#{inspect(data)} did not render"
+      end
+    end
+  end
+
+  describe "datetime values outside the DateTime range" do
+    test "render instead of raising in DateTime.from_unix!/2" do
+      for data <- [
+            [[0, 1], [9_000_000_000_000_000, 2]],
+            [[-9_000_000_000_000_000, 1], [0, 2]],
+            [[0, 1], [1.0e300, 2]]
+          ] do
+        svg = html("s", :line, [%{name: "A", data: data}], options: %{xaxis: %{type: :datetime}})
+        assert svg =~ "eexcharts-svg", "#{inspect(data)} did not render"
+      end
+    end
+  end
+
+  describe "heatmap {x, y} points" do
+    test "render, and name the columns after the first series' x values" do
+      svg =
+        html(
+          "s",
+          :heatmap,
+          [
+            %{name: "R1", data: [%{x: "W1", y: 3}, %{x: "W2", y: 8}]},
+            %{name: "R2", data: [%{x: "W1", y: 5}, %{x: "W2", y: 1}]}
+          ],
+          []
+        )
+
+      assert texts_in(svg, "eexcharts-xaxis-labels") == ["W1", "W2"]
+      assert length(Regex.scan(~r/class="eexcharts-heatmap-rect"/, svg)) == 4
+    end
+
+    test "a cell without a numeric value is left empty" do
+      svg = html("s", :heatmap, [%{name: "R", data: [1, "x", %{x: "c", y: "y"}, nil, 4]}], [])
+      assert length(Regex.scan(~r/class="eexcharts-heatmap-rect"/, svg)) == 2
+    end
+  end
+
   describe "guards: datetime tick alignment" do
     test "a range starting exactly on a minute boundary keeps its first tick" do
       start = TimeScale.to_ms(~N[2026-03-01 10:05:00])

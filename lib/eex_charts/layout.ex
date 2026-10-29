@@ -428,13 +428,19 @@ defmodule EexCharts.Layout do
     range = lmax - lmin
     # Zero and negatives have no logarithm; pin them to the axis floor.
     lv = if is_number(v) and v <= 0, do: lmin, else: safe_log(v, lb)
-    l.grid_y + l.grid_h - (lv - lmin) / range * l.grid_h
+    l.grid_y + l.grid_h - frac(lv - lmin, range) * l.grid_h
   end
 
   def y_for(%__MODULE__{} = l, v, %{nice_min: min, nice_max: max}) do
     range = max - min
-    l.grid_y + l.grid_h - (v - min) / range * l.grid_h
+    l.grid_y + l.grid_h - frac(v - min, range) * l.grid_h
   end
+
+  # Position within a range. A scale whose ends coincide (a log axis over
+  # values <= 0, where every log is 0) puts everything at its start instead
+  # of dividing by zero.
+  defp frac(_offset, range) when range == 0, do: 0.0
+  defp frac(offset, range), do: offset / range
 
   defp safe_log(v, _lb) when not is_number(v) or v <= 0, do: 0.0
   defp safe_log(v, lb), do: :math.log(v) / lb
@@ -443,7 +449,7 @@ defmodule EexCharts.Layout do
   def x_for(%__MODULE__{} = l, v) do
     %{nice_min: min, nice_max: max} = l.scale
     range = max - min
-    l.grid_x + (v - min) / range * l.grid_w
+    l.grid_x + frac(v - min, range) * l.grid_w
   end
 
   @doc "Pixel y of the zero baseline, clamped into the grid."
