@@ -96,6 +96,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   chart and one at the left or right edge cut it in half. The default spot is
   kept when it fits; otherwise the label flips below the marker and slides in
   from the side edge.
+- `EexCharts.Live` treats the size its hook reports as untrusted: each side is
+  rounded and clamped to 1-10,000 px, and a `"measured"` event without two
+  numbers is ignored. A client could send `1.0e308`, which raised in the
+  layout, or a payload without `width`, which crashed the component.
+- Marker shape names given as strings are looked up instead of converted with
+  `String.to_atom/1`. Unknown names draw a circle, as unknown atoms already
+  did, and no longer add a permanent atom each, so shapes taken from user data
+  cannot exhaust the atom table.
 - Radar charts size their label reserve from the formatted labels. A formatter
   that wraps long categories onto several lines used to free no space, because
   the reserve was still measured on the raw, unwrapped category; now it uses the
