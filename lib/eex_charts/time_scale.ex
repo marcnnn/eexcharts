@@ -95,6 +95,16 @@ defmodule EexCharts.TimeScale do
     |> elem(0)
   end
 
+  # A month scale names the year at January instead of "Jan", as
+  # `generateMonthScale` switches the tick's unit to `year` there.
+  defp label_ticks(values, :month) do
+    Enum.map(values, fn ms ->
+      {_y, m} = month_of(ms)
+      unit = if m == 1, do: :year, else: :month
+      %{value: ms, unit: unit, label: format_date(ms, @formats[unit])}
+    end)
+  end
+
   defp label_ticks(values, unit) do
     Enum.map(values, &%{value: &1, unit: unit, label: format_date(&1, @formats[unit])})
   end
@@ -139,8 +149,11 @@ defmodule EexCharts.TimeScale do
     step = pick_step([1, 2, 3, 6, 12], span_months / target)
 
     {y, m} = month_of(min)
-    # First month boundary at or after min, then step months apart.
+    # First month boundary at or after min, then step months apart. Steps
+    # divide the year, so snapping the first tick to a multiple of the step
+    # puts quarters on Jan/Apr/Jul/Oct and yearly ticks on January.
     {sy, sm} = if month_start_ms(y, m) >= min, do: {y, m}, else: add_months(y, m, 1)
+    {sy, sm} = add_months(sy, sm, rem(step - rem(sm - 1, step), step))
 
     Stream.iterate({sy, sm}, fn {yy, mm} -> add_months(yy, mm, step) end)
     |> Stream.map(fn {yy, mm} -> month_start_ms(yy, mm) end)
