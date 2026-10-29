@@ -2,9 +2,17 @@ defmodule EexCharts.SvgSnapshotTest do
   @moduledoc """
   Layer 1 visual regression gate — fast, browserless, runs in `mix test`.
 
-  For every `Dev.ChartExamples.all/0` entry we render the chart to SVG (with
-  `hook: false` so the output is stable and free of the `phx-hook` attribute)
-  and compare it against a committed golden file in `test/snapshots/<id>.svg`.
+  Every `Dev.ChartExamples.all/0` entry is rendered twice and compared against
+  two committed goldens:
+
+    * `test/snapshots/<id>.svg` — `EexCharts.to_svg/4`, the standalone `<svg>`
+      for static output. A real SVG file, so GitHub and image viewers show it
+      as a picture when reviewing a change.
+    * `test/snapshots/<id>.html` — `EexCharts.render/4` with `hook: false` (so
+      the output is free of the `phx-hook` attribute): the full LiveView
+      fragment, with the wrapper `<div>`, the hover furniture the static SVG
+      leaves out, and the HTML tooltips.
+
   This catches structural/geometry regressions on every commit with zero
   flakiness, since the renderer is a pure function of its input and every
   example is deterministic.
@@ -21,22 +29,27 @@ defmodule EexCharts.SvgSnapshotTest do
 
       EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/svg_snapshot_test.exs
 
-  Review the resulting diff in `test/snapshots/` before committing. Regenerate
-  on Linux if you can, so the committed floats stay the ones CI produces.
+  Only goldens that no longer match are rewritten, so regenerating on macOS
+  leaves the Linux-seeded floats of every other golden alone. Review the
+  resulting diff in `test/snapshots/` before committing.
   """
   use ExUnit.Case, async: true
 
   @snapshots_dir Path.join(__DIR__, "snapshots")
   @update? System.get_env("EEXCHARTS_UPDATE_SNAPSHOTS") not in [nil, ""]
 
-  defp render_svg(example) do
-    opts =
-      example
-      |> Dev.ChartExamples.attributes()
-      |> Map.drop([:id, :type, :series])
-      |> Map.put(:hook, false)
-      |> Map.to_list()
+  defp attributes(example) do
+    example
+    |> Dev.ChartExamples.attributes()
+    |> Map.drop([:id, :type, :series])
+  end
 
+  defp render(example, :svg) do
+    EexCharts.to_svg(example.id, example.type, example.series, Map.to_list(attributes(example)))
+  end
+
+  defp render(example, :html) do
+    opts = example |> attributes() |> Map.put(:hook, false) |> Map.to_list()
     {:safe, io} = EexCharts.render(example.id, example.type, example.series, opts)
     IO.iodata_to_binary(io)
   end
@@ -46,33 +59,34 @@ defmodule EexCharts.SvgSnapshotTest do
     :ok
   end
 
-  for example <- Dev.ChartExamples.all() do
+  for example <- Dev.ChartExamples.all(), format <- [:svg, :html] do
     @example example
-    @golden Path.join(@snapshots_dir, "#{example.id}.svg")
+    @format format
+    @golden Path.join(@snapshots_dir, "#{example.id}.#{format}")
 
-    test "#{@example.id} — #{@example.title}" do
-      actual = render_svg(@example)
+    test "#{@example.id}.#{@format} — #{@example.title}" do
+      actual = render(@example, @format)
+      expected = if File.exists?(@golden), do: File.read!(@golden)
 
-      if @update? do
-        File.write!(@golden, actual)
-      else
-        assert File.exists?(@golden),
-               "missing golden #{@golden}. Seed it with EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test"
+      result =
+        if expected,
+          do: EexCharts.SnapshotDiff.compare(actual, expected),
+          else: {:error, "missing golden #{@golden}"}
 
-        expected = File.read!(@golden)
+      case result do
+        :ok ->
+          :ok
 
-        case EexCharts.SnapshotDiff.compare(actual, expected) do
-          :ok ->
-            :ok
+        {:error, _detail} when @update? ->
+          File.write!(@golden, actual)
 
-          {:error, detail} ->
-            flunk(
-              "SVG snapshot mismatch for #{@example.id} (#{@example.title}).\n\n" <>
-                detail <>
-                "\nIf this change is intentional, regenerate with " <>
-                "EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test."
-            )
-        end
+        {:error, detail} ->
+          flunk(
+            "Snapshot mismatch for #{@example.id}.#{@format} (#{@example.title}).\n\n" <>
+              detail <>
+              "\nIf this change is intentional, regenerate with " <>
+              "EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test."
+          )
       end
     end
   end
