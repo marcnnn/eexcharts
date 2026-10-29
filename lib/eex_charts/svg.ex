@@ -261,6 +261,10 @@ defmodule EexCharts.SVG do
   @doc "Formats a data value for labels/tooltips (trims float noise)."
   def fmt_value(v) when is_integer(v), do: Integer.to_string(v)
 
+  # Fixed decimals print every digit of a huge float (and raise past about
+  # 1e250). JavaScript switches to exponent notation at 1e21; so do we.
+  def fmt_value(v) when is_float(v) and abs(v) >= 1.0e21, do: :erlang.float_to_binary(v, [:short])
+
   def fmt_value(v) when is_float(v) do
     decimals = value_decimals(v)
     rounded = EexCharts.Scale.strip_number(Float.round(v, decimals))

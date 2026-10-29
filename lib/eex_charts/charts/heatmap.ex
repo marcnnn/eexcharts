@@ -4,7 +4,10 @@ defmodule EexCharts.Charts.Heatmap do
   `common/treemap/Helpers` color logic.
 
   Each series is a row (name = y label); `data` holds one number per x
-  category. Cells form a grid: row height is `grid_h / n_series`, cell width
+  category, or one `%{x: category, y: value}` point per category as in
+  ApexCharts. With points and no `xaxis.categories`, the points' `x` values
+  name the columns. A cell without a numeric value is left empty.
+  Cells form a grid: row height is `grid_h / n_series`, cell width
   is `grid_w / n_categories`. A cell's color is the series color shaded by the
   value's intensity within the series' `min..max` range (see
   `plot_options.heatmap.shade_intensity`), or — when
@@ -412,8 +415,9 @@ defmodule EexCharts.Charts.Heatmap do
 
   defp top_axis?(cfg), do: cfg.xaxis.position == :top
 
+  # A cell without a numeric value is left empty.
   defp cell_value(v) when is_number(v), do: v
-  defp cell_value(%{} = point), do: Map.get(point, :y)
+  defp cell_value(%{y: y}) when is_number(y), do: y
   defp cell_value(_point), do: nil
 
   defp point_label(%{label: label}), do: label

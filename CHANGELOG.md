@@ -71,6 +71,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   labels by `yaxis.labels.show`, the reverse of how the layout sized them.
 - Horizontal crowded bar categories are thinned to every k-th label instead
   of overlapping.
+- Extreme numeric data no longer raises. Every chart type raised
+  `ArithmeticError` on values near the float limit (`±1.0e308`), and line
+  charts on values too small or too close together for a scale. Series and
+  categories are now clamped to `±1.0e100` and magnitudes below `1.0e-100`
+  become `0.0` (`EexCharts.Numbers`); the scale clamps a forced `min`/`max` the
+  same way and treats a range below float precision as degenerate. Values from
+  `1e21` up are labelled in exponent form (`1.0e21`), as JavaScript does.
+- A logarithmic y-axis over values `<= 0` renders instead of raising.
+- Datetime values outside years -9000..9000 are clamped instead of raising in
+  `DateTime.from_unix!/2`.
+- Heatmaps accept ApexCharts' `%{x:, y:}` points; without
+  `xaxis.categories`, the first series' `x` values name the columns. A cell
+  without a numeric value is left empty instead of raising.
 - Styled label segments line up with the text around them in resvg-based
   renderers (Typst, Inkscape exports). `dominant-baseline` is not inherited in
   SVG 1.1, and resvg/usvg follow 1.1: a `tspan` that does not set it falls back
