@@ -58,7 +58,50 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   implementation (`EexCharts.LabelText`), so all three measure segments the same
   way when reserving space, and y-axis formatters may return several lines too.
 
+- Per-point and per-series paint (`EexCharts.PointStyle`, #29, #33): data
+  points take `fill_color`, `stroke_color` and `fill` on bar, range bar,
+  dumbbell, waterfall and heatmap. `fill: %{type: :none}` draws a mark
+  outline-only, and `fill.type: :pattern` (v4.7.0 styles: vertical,
+  horizontal and slanted lines, squares, circles) works per point, per series
+  or chart-wide. Bars accept `%{x:, y:}` points. Series keep extra keys such
+  as `fill`, `opacity` and `end_label`, and static output resolves `var()` in
+  series data as well as in the config.
+- Heatmap tables (#29, #32): per-cell `label` (string or lines of styled
+  segments), `plot_options.heatmap.reverse_rows`, `xaxis.position: :top`
+  (heatmap only), `row_groups` with `group_gap`, `summary_rows` with
+  `summary_gap`, `xaxis.marked` with `xaxis.marked_bar`, and
+  `plot_options.heatmap.enable_shades`.
+- Bar and range bar `goals` on data points (v4.7.0, #31), with
+  `stroke_width`, `stroke_height`, `stroke_color`, `stroke_dash_array` and
+  `stroke_line_cap`; goal values extend the axis and appear in the tooltip.
+  `shape: :circle` with `size:` draws a dot instead of a line.
+- Sparkline mode, `chart.sparkline.enabled` (v4.7.0, #36): no axes, grid,
+  legend or labels, and the plot gets the whole SVG, for charts inline in
+  table rows. Static output stays sharp at small sizes.
+- `:level_meter` chart (#30): rows of segments filled up to a value, with
+  fractional fill, matrix or list layout, a target colour and gap, and gains
+  and drops against a previous value.
+- Line and area end labels (#35): `end_label` on a series and the
+  `end_labels` option label each line at its last point, nudged apart when
+  they collide, with room reserved on the right. Series take `opacity`, and
+  `stroke.width` / `markers.size` accept one value per series.
+- Horizontal waterfall (#34), and per-kind waterfall styles: each of
+  `increase`, `decrease` and `total` takes a colour, `:outline` or
+  `%{color:, fill:}`.
+- Timeline range bars (#33): horizontal range bars on a datetime axis take
+  `Date`, `DateTime`, `NaiveDateTime`, ISO or unix ms ranges, points sharing
+  an `x` share a row (`range_bar_group_rows`, `range_bar_overlap`), bars carry
+  a `label`, `plot_options.bar.data_labels.position: :outside_end` puts
+  labels past the bar end, and x annotations (a "Today" line) sit on the time
+  axis.
+
 ### Fixed
+
+- daisy theme: annotation label pills and point markers follow the daisyUI
+  surface, so their text stays readable on dark daisyUI themes. Waterfall
+  kind, connector and on-bar label colours follow the theme too.
+- Month time scales name the year at January ("2024" instead of "Jan '24"),
+  as v4.7.0 does, and stepped ticks line up with the calendar.
 
 - Dark theme: annotation labels and data labels on light series colours were
   near-invisible (the fore colour on a white or light box, contrast about

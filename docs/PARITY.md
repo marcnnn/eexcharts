@@ -24,7 +24,7 @@ feature exists, not as its source.
 | Sunburst | 6.7 | Partition (icicle) layout in polar coordinates | `Charts.Sunburst`, `Hierarchy` |
 | Nested treemaps | 6.9 | Squarified treemap (Bruls, Huizing, van Wijk 2000), applied recursively | `Charts.Treemap` |
 | Funnel, pyramid types | 5.12 | v4.7.0 `isFunnel` (ported) | `Charts.Funnel` |
-| Waterfall | 7.1 | Running totals | `Charts.Waterfall` |
+| Waterfall | 7.1 | Running totals, vertical and horizontal, per-kind colour / outline / pattern | `Charts.Waterfall` |
 | Dumbbell type | 7.1 | v4.7.0 `isDumbbell` (ported) | `Charts.Dumbbell` |
 | Grouped stacks, 100% per group | 8.2, 8.3 | Own design | `Charts.StackGroups` |
 | Stacked and 100% area/line | 8.5 | v4.7.0 stacked area (ported), own 100% normalisation | `Stacking` |
@@ -41,6 +41,27 @@ feature exists, not as its source.
 | Per-point data-label offset functions | 6.8 | Own design | `DataLabels` |
 | Log axes below the base | 8.3 | Powers of the base below 1 | `Scale` |
 | Point-annotation tooltips | 6.7 | Existing tooltip mechanism | `Annotations` |
+
+## EexCharts extensions
+
+These are not named in any ApexCharts release note. They were designed here,
+mostly for static SVG output (`to_svg/4`) in reports, and sit next to the
+v4.7.0 options they extend. v4.7.0 features they build on (data-point
+`fillColor`, pattern fills, `goals`, `chart.sparkline`, timeline range bars,
+`xaxis.position`, `enableShades`) were ported from the v4.7.0 source.
+
+| Feature | Built from | Module |
+|---|---|---|
+| Outline-only series and points (`fill: %{type: :none}`) | Own design | `PointStyle` |
+| Heatmap per-cell colours and multi-line cell labels | Own design | `Charts.Heatmap` |
+| Heatmap rows top to bottom (`reverse_rows`); `xaxis.position: :top` on heatmaps only | Own design | `Charts.Heatmap` |
+| Heatmap row groups and summary rows | Own design | `Charts.Heatmap.Rows` |
+| Heatmap marked columns (`xaxis.marked`) | Own design | `Charts.Heatmap` |
+| Circle goal markers (`goals: [%{shape: :circle, size:}]`) | Own design | `Goals` |
+| Level meter (`:level_meter`) | Own design | `Charts.LevelMeter` |
+| Line and area end labels | Own design; overlap removal as a 1-D least-squares fit | `EndLabels` |
+| Sparkline marker pad of at least the drawn marker; pixel-exact bar sparklines | Own design | `Layout`, `Renderer` |
+| Range bar labels past the bar end (`data_labels.position: :outside_end`) | Own design | `Charts.RangeBar` |
 
 Deliberately not rebuilt: the canvas renderer, animations and tweening, wheel
 zoom, keyboard navigation, shadow-DOM support (all browser-side), the
