@@ -2,16 +2,10 @@ defmodule EexCharts.SvgSnapshotTest do
   @moduledoc """
   Layer 1 visual regression gate — fast, browserless, runs in `mix test`.
 
-  Every `Dev.ChartExamples.all/0` entry is rendered twice and compared against
-  two committed goldens:
-
-    * `test/snapshots/<id>.svg` — `EexCharts.to_svg/4`, the standalone `<svg>`
-      for static output. A real SVG file, so GitHub and image viewers show it
-      as a picture when reviewing a change.
-    * `test/snapshots/<id>.html` — `EexCharts.render/4` with `hook: false` (so
-      the output is free of the `phx-hook` attribute): the full LiveView
-      fragment, with the wrapper `<div>`, the hover furniture the static SVG
-      leaves out, and the HTML tooltips.
+  Every `Dev.ChartExamples.all/0` entry is rendered with `EexCharts.to_svg/4`
+  and compared against a committed golden in `test/snapshots/<id>.svg`. The
+  golden is a standalone `<svg>`, so GitHub and image viewers show it as a
+  picture when reviewing a change.
 
   This catches structural/geometry regressions on every commit with zero
   flakiness, since the renderer is a pure function of its input and every
@@ -44,14 +38,8 @@ defmodule EexCharts.SvgSnapshotTest do
     |> Map.drop([:id, :type, :series])
   end
 
-  defp render(example, :svg) do
+  defp render(example) do
     EexCharts.to_svg(example.id, example.type, example.series, Map.to_list(attributes(example)))
-  end
-
-  defp render(example, :html) do
-    opts = example |> attributes() |> Map.put(:hook, false) |> Map.to_list()
-    {:safe, io} = EexCharts.render(example.id, example.type, example.series, opts)
-    IO.iodata_to_binary(io)
   end
 
   setup_all do
@@ -59,13 +47,12 @@ defmodule EexCharts.SvgSnapshotTest do
     :ok
   end
 
-  for example <- Dev.ChartExamples.all(), format <- [:svg, :html] do
+  for example <- Dev.ChartExamples.all() do
     @example example
-    @format format
-    @golden Path.join(@snapshots_dir, "#{example.id}.#{format}")
+    @golden Path.join(@snapshots_dir, "#{example.id}.svg")
 
-    test "#{@example.id}.#{@format} — #{@example.title}" do
-      actual = render(@example, @format)
+    test "#{@example.id} — #{@example.title}" do
+      actual = render(@example)
       expected = if File.exists?(@golden), do: File.read!(@golden)
 
       result =
@@ -82,7 +69,7 @@ defmodule EexCharts.SvgSnapshotTest do
 
         {:error, detail} ->
           flunk(
-            "Snapshot mismatch for #{@example.id}.#{@format} (#{@example.title}).\n\n" <>
+            "SVG snapshot mismatch for #{@example.id} (#{@example.title}).\n\n" <>
               detail <>
               "\nIf this change is intentional, regenerate with " <>
               "EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test."

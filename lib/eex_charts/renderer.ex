@@ -75,7 +75,9 @@ defmodule EexCharts.Renderer do
   # hook (tooltip HTML, crosshair, hover zones, hover markers).
 
   defp staticize_params(params) do
-    Map.drop(params, [:on_click, :push_hover, :on_legend_click])
+    params
+    |> Map.drop([:on_click, :push_hover, :on_legend_click])
+    |> Map.update(:series, nil, &resolve_cfg_vars/1)
   end
 
   @doc false
@@ -86,7 +88,8 @@ defmodule EexCharts.Renderer do
   end
 
   # Rasterizers render `var(…)` as black (the fallback inside is ignored), so
-  # resolve fallbacks to their literals config-wide. Doing it on the config —
+  # resolve fallbacks to their literals config-wide, and in the series too,
+  # where per-point colours (`fill_color`, `stroke_color`) live. Doing it on the config —
   # rather than the emitted SVG — also means `Color.shade/2` sees plain hex
   # and never emits `color-mix()`, which rasterizers can't parse either.
 
@@ -151,7 +154,7 @@ defmodule EexCharts.Renderer do
     series_io =
       case cfg.chart.type do
         :bar ->
-          {io, _bars} = Charts.Bar.render(cfg, series, l, on_click: params[:on_click])
+          {io, _bars} = Charts.Bar.render(cfg, series, l, id: id, on_click: params[:on_click])
           io
 
         :candlestick ->
@@ -167,10 +170,10 @@ defmodule EexCharts.Renderer do
           Charts.Violin.render(cfg, series, l, on_click: params[:on_click])
 
         :range_bar ->
-          Charts.RangeBar.render(cfg, series, l, on_click: params[:on_click])
+          Charts.RangeBar.render(cfg, series, l, id: id, on_click: params[:on_click])
 
         :waterfall ->
-          Charts.Waterfall.render(cfg, series, l, on_click: params[:on_click])
+          Charts.Waterfall.render(cfg, series, l, id: id, on_click: params[:on_click])
 
         t when t in [:scatter, :bubble] ->
           Charts.Scatter.render(cfg, series, l, id, on_click: params[:on_click])
@@ -219,7 +222,8 @@ defmodule EexCharts.Renderer do
   @doc """
   Normalizes user series input into `[%{name: binary, data: list, index: i}]`
   where `index` is the series' original position (colors stay stable when
-  series are hidden via the legend).
+  series are hidden via the legend). Any other key of a series map (`fill`,
+  `color`, ...) is kept as given.
   """
   def normalize_series(nil), do: []
 
@@ -232,12 +236,12 @@ defmodule EexCharts.Renderer do
       |> Enum.with_index()
       |> Enum.map(fn
         {%{} = s, i} ->
-          %{
+          Map.merge(s, %{
             name: to_string(s[:name] || "series-#{i + 1}"),
             data: s[:data] || [],
             index: i,
             group: s[:group]
-          }
+          })
 
         {other, i} ->
           %{name: "series-#{i + 1}", data: List.wrap(other), index: i}
@@ -250,6 +254,7 @@ defmodule EexCharts.Renderer do
     do: Charts.Histogram.prepare(cfg, s)
 
   defp prepare_series(%{chart: %{type: :violin}} = cfg, s), do: Charts.Violin.prepare(cfg, s)
+  defp prepare_series(%{chart: %{type: :bar}} = cfg, s), do: {cfg, Charts.Bar.prepare(s)}
   defp prepare_series(cfg, series), do: {cfg, series}
 
   defp data_range(cfg, series) do
@@ -972,7 +977,12 @@ defmodule EexCharts.Renderer do
               y: y,
               text_anchor: "middle",
               dominant_baseline: "central",
-              fill: data_label_color(dl, r.series, r.color),
+              fill:
+                EexCharts.PointStyle.label_color(
+                  cfg,
+                  r.style,
+                  data_label_color(dl, r.series, r.color)
+                ),
               font_size: dl.style.font_size,
               font_weight: dl.style.font_weight,
               class: "eexcharts-datalabel"
