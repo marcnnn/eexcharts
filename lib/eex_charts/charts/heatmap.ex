@@ -107,7 +107,7 @@ defmodule EexCharts.Charts.Heatmap do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Color, Config, LabelText, Layout, Legend, PointStyle, Renderer}
+  alias EexCharts.{Color, Config, Indexed, LabelText, Layout, Legend, PointStyle, Renderer}
   alias EexCharts.Charts.Heatmap.{GradientLegend, Rows, XLayout}
 
   # WCAG AA for normal text: the floor below which a label on a cell's own
@@ -328,12 +328,14 @@ defmodule EexCharts.Charts.Heatmap do
     cells =
       if n_cats > 0 do
         x_div = grid_w / n_cats
+        cats = Indexed.new(categories)
 
         Enum.flat_map(rows, fn %{series: s, y: y, h: y_div} ->
           {color_fn, fore_fn} = cell_color_fns(cfg, s, ranges, ctx)
+          data = Indexed.new(s.data)
 
           0..(n_cats - 1)
-          |> Enum.map(fn j -> {j, Enum.at(s.data, j)} end)
+          |> Enum.map(fn j -> {j, Indexed.at(data, j)} end)
           |> Enum.map(fn {j, point} -> {j, point, cell_value(point)} end)
           |> Enum.reject(fn {_j, _point, v} -> is_nil(v) end)
           |> Enum.map(fn {j, point, v} ->
@@ -343,7 +345,7 @@ defmodule EexCharts.Charts.Heatmap do
               y: y,
               w: x_div,
               h: y_div,
-              category: Enum.at(categories, j, to_string(j + 1))
+              category: Indexed.at(cats, j, to_string(j + 1))
             })
           end)
         end)

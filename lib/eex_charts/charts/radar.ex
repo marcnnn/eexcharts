@@ -13,7 +13,7 @@ defmodule EexCharts.Charts.Radar do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, LabelText, Layout, Legend, Renderer, Scale}
+  alias EexCharts.{Config, Indexed, LabelText, Layout, Legend, Renderer, Scale}
 
   @doc "Renders the complete radar chart container."
   def render_chart(cfg, params, id) do
@@ -450,9 +450,11 @@ defmodule EexCharts.Charts.Radar do
   end
 
   defp vertices(geo, s) do
+    data = Indexed.new(s.data)
+
     0..(geo.n - 1)
     |> Enum.map(fn j ->
-      v = Enum.at(s.data, j)
+      v = Indexed.at(data, j)
       if is_number(v), do: point(geo, v, j), else: nil
     end)
   end
@@ -517,9 +519,11 @@ defmodule EexCharts.Charts.Radar do
   end
 
   defp markers_for(geo, s) do
+    data = Indexed.new(s.data)
+
     0..(geo.n - 1)
     |> Enum.map(fn j ->
-      v = Enum.at(s.data, j)
+      v = Indexed.at(data, j)
 
       if is_number(v) do
         {x, y} = point(geo, v, j)
@@ -536,14 +540,16 @@ defmodule EexCharts.Charts.Radar do
   defp tooltips(cfg, _geo, series, categories) do
     if cfg.tooltip.enabled do
       n = categories |> length()
+      cats = Indexed.new(categories)
+      columns = Enum.map(series, &{&1, Indexed.new(&1.data)})
 
       tips =
         Enum.map(0..(max(n, 1) - 1), fn j ->
-          title = Enum.at(categories, j, to_string(j + 1))
+          title = Indexed.at(cats, j, to_string(j + 1))
 
           rows =
-            Enum.map(series, fn s ->
-              v = Enum.at(s.data, j)
+            Enum.map(columns, fn {s, data} ->
+              v = Indexed.at(data, j)
 
               if is_number(v) do
                 Renderer.tooltip_row(

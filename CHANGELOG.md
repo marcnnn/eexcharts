@@ -142,6 +142,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A malformed hex color such as `#ggg` no longer raises in gradient and
   heatmap shading; it is shaded with `color-mix()` like any non-hex color.
 
+### Performance
+
+- Render time grows linearly with the number of points. Several loops read
+  the data, categories, labels or palette by position with `Enum.at/2` inside
+  a loop over positions, which made them quadratic: a 32,000-point smooth
+  line took about 36 s and a stacked bar of the same size about 39 s. They
+  now read from tuples (`EexCharts.Indexed`), and the squarified treemap keeps
+  its row's running min, max and sum instead of rescanning the row, so a zero
+  value no longer makes it quadratic. Those charts now render in 1-3 s.
+  Output is unchanged: the SVG goldens are byte-identical.
+- `EexCharts.SVG.esc/1` returns text with nothing to escape as is, instead of
+  running five replace passes over it.
+
 ## v0.1.1 — 2026-09-03
 
 ### Fixed

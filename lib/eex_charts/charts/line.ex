@@ -245,13 +245,14 @@ defmodule EexCharts.Charts.Line do
   defp monotone_beziers([_] = _pts), do: []
 
   defp monotone_beziers(pts) do
-    xs = Enum.map(pts, &elem(&1, 0))
-    ys = Enum.map(pts, &elem(&1, 1))
-    n = length(pts)
+    xs = pts |> Enum.map(&elem(&1, 0)) |> List.to_tuple()
+    ys = pts |> Enum.map(&elem(&1, 1)) |> List.to_tuple()
+    n = tuple_size(xs)
 
     slopes =
-      Enum.zip(Enum.chunk_every(pts, 2, 1, :discard), 0..(n - 2))
-      |> Enum.map(fn {[{x1, y1}, {x2, y2}], _i} ->
+      pts
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.map(fn [{x1, y1}, {x2, y2}] ->
         if x2 == x1, do: 0.0, else: (y2 - y1) / (x2 - x1)
       end)
 
@@ -265,9 +266,9 @@ defmodule EexCharts.Charts.Line do
 
     # Fritsch–Carlson clamp for monotonicity.
     m =
-      Enum.reduce(0..(n - 2), List.to_tuple(m0), fn i, m ->
-        d = Enum.at(slopes, i)
-
+      slopes
+      |> Enum.with_index()
+      |> Enum.reduce(List.to_tuple(m0), fn {d, i}, m ->
         cond do
           abs(d) < 1.0e-6 ->
             m |> put_elem(i, 0.0) |> put_elem(i + 1, 0.0)
@@ -288,19 +289,21 @@ defmodule EexCharts.Charts.Line do
 
     # Control arms: 1/6 of the neighbour x-spacing, damped by slope.
     tangents =
-      Enum.map(0..(n - 1), fn i ->
-        prev_x = Enum.at(xs, max(i - 1, 0))
-        next_x = Enum.at(xs, min(i + 1, n - 1))
+      0..(n - 1)
+      |> Enum.map(fn i ->
+        prev_x = elem(xs, max(i - 1, 0))
+        next_x = elem(xs, min(i + 1, n - 1))
         mi = elem(m, i)
         s = (next_x - prev_x) / (6 * (1 + mi * mi))
         {s, mi * s}
       end)
+      |> List.to_tuple()
 
     Enum.map(0..(n - 2), fn i ->
-      {x1, y1} = {Enum.at(xs, i), Enum.at(ys, i)}
-      {x2, y2} = {Enum.at(xs, i + 1), Enum.at(ys, i + 1)}
-      {tx1, ty1} = Enum.at(tangents, i)
-      {tx2, ty2} = Enum.at(tangents, i + 1)
+      {x1, y1} = {elem(xs, i), elem(ys, i)}
+      {x2, y2} = {elem(xs, i + 1), elem(ys, i + 1)}
+      {tx1, ty1} = elem(tangents, i)
+      {tx2, ty2} = elem(tangents, i + 1)
       curve(x1 + tx1, y1 + ty1, x2 - tx2, y2 - ty2, x2, y2)
     end)
   end

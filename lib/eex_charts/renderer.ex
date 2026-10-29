@@ -8,7 +8,7 @@ defmodule EexCharts.Renderer do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, DataLabels, LabelText, Layout, Legend, Stacking}
+  alias EexCharts.{Charts, Config, DataLabels, Indexed, LabelText, Layout, Legend, Stacking}
 
   # Circular / hierarchical types own their full SVG assembly.
   @standalone_types %{
@@ -50,6 +50,7 @@ defmodule EexCharts.Renderer do
 
     cfg = Config.build(type, opts) |> Charts.BarFamily.finalize(params)
     cfg = if params[:static], do: staticize_cfg(cfg), else: cfg
+    cfg = Config.index_colors(cfg)
 
     cond do
       type in [:pie, :donut, :polar_area] ->
@@ -343,9 +344,10 @@ defmodule EexCharts.Renderer do
       if cfg.chart.stacked and cfg.chart.type == :bar do
         # Stacked: extremes are the per-category positive and negative sums.
         n = series |> Enum.map(&length(&1.data)) |> Enum.max(fn -> 0 end)
+        columns = Enum.map(series, &Indexed.new(&1.data))
 
         Enum.flat_map(0..max(n - 1, 0), fn j ->
-          vals = Enum.map(series, fn s -> Enum.at(s.data, j) end) |> Enum.filter(&is_number/1)
+          vals = columns |> Enum.map(&Indexed.at(&1, j)) |> Enum.filter(&is_number/1)
           pos = vals |> Enum.filter(&(&1 >= 0)) |> Enum.sum()
           neg = vals |> Enum.filter(&(&1 < 0)) |> Enum.sum()
           [pos, neg]
@@ -1288,14 +1290,17 @@ defmodule EexCharts.Renderer do
   # tooltip is off.
   defp cartesian_tooltips(cfg, series, categories, n, anno_tips) do
     if cfg.tooltip.enabled and n > 0 do
+      cats = Indexed.new(categories)
+      columns = Enum.map(series, &{&1, Indexed.new(&1.data), EexCharts.Goals.indexed(&1)})
+
       tips =
         Enum.map(0..(n - 1), fn j ->
-          title = Enum.at(categories, j, to_string(j + 1))
+          title = Indexed.at(cats, j, to_string(j + 1))
           title = format_tooltip_x(cfg, title)
 
           rows =
-            Enum.map(series, fn s ->
-              v = Enum.at(s.data, j)
+            Enum.map(columns, fn {s, data, goals} ->
+              v = Indexed.at(data, j)
 
               cond do
                 cfg.chart.type == :range_bar and not cfg.plot_options.bar.is_dumbbell ->
@@ -1314,7 +1319,7 @@ defmodule EexCharts.Renderer do
                       s.name,
                       Stacking.tooltip_value(s, j, tooltip_value(cfg, v))
                     ),
-                    goal_rows(cfg, s, j)
+                    goal_rows(cfg, EexCharts.Goals.of(goals, j))
                   ]
               end
             end)
@@ -1333,8 +1338,8 @@ defmodule EexCharts.Renderer do
 
   # v4.7.0 lists a point's goals under its value.
   @doc false
-  def goal_rows(cfg, s, j) do
-    for g <- EexCharts.Goals.of(s, j) do
+  def goal_rows(cfg, goals) do
+    for g <- goals do
       tooltip_row(
         EexCharts.Goals.color(cfg, g),
         to_string(g[:name] || ""),
@@ -1413,12 +1418,13 @@ defmodule EexCharts.Renderer do
   defp render_pie(cfg, params, id) do
     {all_values, all_labels} = pie_values_labels(cfg, params)
     hidden = hidden_set(params)
+    labels_t = Indexed.new(all_labels)
 
     {values, labels, indices} =
       all_values
       |> Enum.with_index()
       |> Enum.reject(fn {_v, i} -> MapSet.member?(hidden, i) end)
-      |> Enum.map(fn {v, i} -> {v, Enum.at(all_labels, i), i} end)
+      |> Enum.map(fn {v, i} -> {v, Indexed.at(labels_t, i), i} end)
       |> Enum.reduce({[], [], []}, fn {v, lab, i}, {vs, ls, is} ->
         {[v | vs], [lab | ls], [i | is]}
       end)

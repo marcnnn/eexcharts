@@ -26,7 +26,7 @@ defmodule EexCharts.Charts.Pie do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Legend, Scale}
+  alias EexCharts.{Config, Indexed, Legend, Scale}
   alias EexCharts.Charts.Sector
 
   @doc """
@@ -67,6 +67,8 @@ defmodule EexCharts.Charts.Pie do
       end
 
     polar_max = if polar?, do: max(polar_scale.nice_max, 1), else: 1
+    indices_t = Indexed.new(indices)
+    labels_t = Indexed.new(labels)
 
     {slices, _} =
       values
@@ -82,11 +84,11 @@ defmodule EexCharts.Charts.Pie do
           end
 
         slice_r = if polar?, do: r * v / polar_max, else: r
-        index = Enum.at(indices, pos, pos)
+        index = Indexed.at(indices_t, pos, pos)
 
         slice = %{
           index: index,
-          label: Enum.at(labels, pos) || "series-#{index + 1}",
+          label: Indexed.at(labels_t, pos) || "series-#{index + 1}",
           value: v,
           pct: if(total > 0, do: 100 * v / total, else: 0),
           angle: angle,

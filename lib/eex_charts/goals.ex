@@ -42,7 +42,7 @@ defmodule EexCharts.Goals do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Layout}
+  alias EexCharts.{Config, Indexed, Layout}
 
   @default_color "#a8a8a8"
   @default_radius 5
@@ -57,7 +57,7 @@ defmodule EexCharts.Goals do
   bar instead.
   """
   def render(cfg, series, rects, %Layout{} = l) do
-    by_index = Map.new(series, &{&1.index, &1})
+    by_index = Map.new(series, &{&1.index, indexed(&1)})
 
     rects
     |> Enum.group_by(& &1.series)
@@ -70,13 +70,21 @@ defmodule EexCharts.Goals do
     end)
   end
 
-  @doc "The goals of data point `j` of `series` (`[]` when it has none)."
-  def of(series, j) do
-    case Enum.at(series[:source_data] || series.data, j) do
-      %{goals: goals} when is_list(goals) -> Enum.filter(goals, &is_number(&1[:value]))
-      _ -> []
-    end
-  end
+  @doc """
+  The data points of `series` that may carry goals, indexed for `of/2`. Build
+  it once per series: reading points by position from the list would make a
+  loop over the points quadratic.
+  """
+  def indexed(series), do: Indexed.new(series[:source_data] || series.data)
+
+  @doc "The goals of data point `j` of `indexed/1` (`[]` when it has none)."
+  def of(points, j), do: of_point(Indexed.at(points, j))
+
+  @doc "The goals of one data point (`[]` when it has none)."
+  def of_point(%{goals: goals}) when is_list(goals),
+    do: Enum.filter(goals, &is_number(&1[:value]))
+
+  def of_point(_point), do: []
 
   @doc "The colour a goal is drawn in."
   def color(cfg, goal) do
@@ -91,8 +99,8 @@ defmodule EexCharts.Goals do
   def extend_range({mn, mx} = range, series) do
     values =
       for s <- series,
-          j <- 0..(length(s[:source_data] || s.data) - 1)//1,
-          g <- of(s, j),
+          point <- s[:source_data] || s.data,
+          g <- of_point(point),
           do: g.value
 
     case values do

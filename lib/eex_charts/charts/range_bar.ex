@@ -491,6 +491,7 @@ defmodule EexCharts.Charts.RangeBar do
   def tooltip_rows(cfg, s, j) do
     rows = row_index(cfg)
     color = Config.color_at(cfg, s.index)
+    goals = EexCharts.Goals.indexed(s)
 
     s.data
     |> Enum.with_index()
@@ -498,7 +499,7 @@ defmodule EexCharts.Charts.RangeBar do
     |> Enum.map(fn {p, k} ->
       [
         EexCharts.Renderer.tooltip_row(color, s.name, tooltip_value(cfg, p)),
-        EexCharts.Renderer.goal_rows(cfg, s, k)
+        EexCharts.Renderer.goal_rows(cfg, EexCharts.Goals.of(goals, k))
       ]
     end)
   end

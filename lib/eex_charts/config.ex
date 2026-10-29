@@ -946,9 +946,30 @@ defmodule EexCharts.Config do
   def color_for(list, i) when is_list(list), do: Enum.at(list, rem(i, length(list)))
   def color_for(value, _i), do: value
 
-  @doc "Color for series/slice `i`, cycling through the configured palette."
+  @doc """
+  Color for series/slice `i`, cycling through the configured palette.
+
+  Reads the tuple `index_colors/1` stored when there is one, so a palette
+  with a color per data point does not cost a list walk per point.
+  """
+  def color_at(%{indexed_colors: colors}, i) when tuple_size(colors) > 0 do
+    elem(colors, rem(i, tuple_size(colors)))
+  end
+
   def color_at(cfg, i) do
     colors = colors(cfg)
     Enum.at(colors, rem(i, length(colors)))
+  end
+
+  @doc """
+  Stores the palette as a tuple for `color_at/2`. Call it once the config is
+  final: the renderer does so after every rewrite of `colors` (theme, static
+  `var()` resolution), so the tuple cannot go stale.
+  """
+  def index_colors(cfg) do
+    case colors(cfg) do
+      colors when is_list(colors) -> Map.put(cfg, :indexed_colors, List.to_tuple(colors))
+      _other -> cfg
+    end
   end
 end

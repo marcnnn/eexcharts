@@ -114,7 +114,9 @@ defmodule EexCharts.SVG do
   defp safe_attr?(name, v) when name in @css_attrs and is_binary(v), do: CSS.safe_value?(v)
   defp safe_attr?(_name, _v), do: true
 
-  defp attr_name(k) when is_atom(k), do: k |> Atom.to_string() |> String.replace("_", "-")
+  defp attr_name(k) when is_atom(k),
+    do: k |> Atom.to_string() |> :binary.replace("_", "-", [:global])
+
   defp attr_name(k) when is_binary(k), do: k
 
   defp attr_value(true), do: ""
@@ -215,6 +217,17 @@ defmodule EexCharts.SVG do
 
   @doc "Escapes text for use in SVG/HTML content and attribute values."
   def esc(text) when is_binary(text) do
+    # Most chart text (numbers, ticks, plain labels) has nothing to escape;
+    # one scan for the five characters skips the five replace passes.
+    case :binary.match(text, ["&", "<", ">", "\"", "'"]) do
+      :nomatch -> text
+      _ -> replace_entities(text)
+    end
+  end
+
+  def esc(other), do: other |> to_string() |> esc()
+
+  defp replace_entities(text) do
     text
     |> String.replace("&", "&amp;")
     |> String.replace("<", "&lt;")
@@ -222,8 +235,6 @@ defmodule EexCharts.SVG do
     |> String.replace("\"", "&quot;")
     |> String.replace("'", "&#39;")
   end
-
-  def esc(other), do: other |> to_string() |> esc()
 
   @doc """
   Formats a number for SVG coordinates.
