@@ -8,12 +8,12 @@ defmodule EexCharts.Charts.Bar do
   slot. Values are drawn from the zero baseline, so negatives extend the
   other way. Stacked bars accumulate positive and negative totals separately.
   `border_radius` rounds the value-end corners (`:end`) or all corners
-  (`:around`).
+  (`:around`). Data points may carry `goals` (see `EexCharts.Goals`).
   """
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Layout, PointStyle}
+  alias EexCharts.{Config, Goals, Layout, PointStyle}
 
   @doc """
   Renders all bar series as an SVG group; returns `{iodata, bar_rects}`.
@@ -58,7 +58,7 @@ defmodule EexCharts.Charts.Bar do
         ])
       end)
 
-    {[defs, groups], bars}
+    {[defs, groups, Goals.render(cfg, series, bars, l)], bars}
   end
 
   defp class(%{class: nil}), do: "eexcharts-bar"
