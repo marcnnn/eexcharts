@@ -28,7 +28,7 @@ defmodule EexCharts.Charts.Heatmap do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Color, Config, Layout, Legend, Renderer}
+  alias EexCharts.{Color, Config, Indexed, Layout, Legend, Renderer}
   alias EexCharts.Charts.Heatmap.{GradientLegend, XLayout}
 
   @doc "Renders the complete heatmap container."
@@ -192,6 +192,7 @@ defmodule EexCharts.Charts.Heatmap do
       if n_vis > 0 and n_cats > 0 do
         y_div = grid_h / n_vis
         x_div = grid_w / n_cats
+        cats = Indexed.new(categories)
 
         series
         |> Enum.with_index()
@@ -199,9 +200,10 @@ defmodule EexCharts.Charts.Heatmap do
           # Series 0 sits at the bottom (ApexCharts draws bottom-up).
           y = grid_y + (n_vis - 1 - p) * y_div
           {color_fn, fore_fn} = cell_color_fns(cfg, s, ranges, ctx)
+          data = Indexed.new(s.data)
 
           0..(n_cats - 1)
-          |> Enum.map(fn j -> {j, Enum.at(s.data, j)} end)
+          |> Enum.map(fn j -> {j, Indexed.at(data, j)} end)
           |> Enum.reject(fn {_j, v} -> is_nil(v) end)
           |> Enum.map(fn {j, v} ->
             %{
@@ -215,7 +217,7 @@ defmodule EexCharts.Charts.Heatmap do
               color: color_fn.(v),
               fore: fore_fn.(v),
               name: s.name,
-              category: Enum.at(categories, j, to_string(j + 1))
+              category: Indexed.at(cats, j, to_string(j + 1))
             }
           end)
         end)

@@ -31,7 +31,7 @@ defmodule EexCharts.Charts.Treemap do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Color, Config, Hierarchy, Layout, Renderer}
+  alias EexCharts.{Color, Config, Hierarchy, Indexed, Layout, Renderer}
 
   @doc "Renders the complete treemap container."
   def render_chart(cfg, params, id) do
@@ -100,13 +100,13 @@ defmodule EexCharts.Charts.Treemap do
       series
       |> Enum.with_index()
       |> Enum.flat_map(fn {s, i} ->
-        node = Enum.at(nodes, i) || []
+        node = Indexed.new(Enum.at(nodes, i) || [])
         {color_fn, _} = cell_color_fns(cfg, s, i, has_negs)
 
         s.points
         |> Enum.with_index()
         |> Enum.map(fn {pt, j} ->
-          [x1, y1, x2, y2] = Enum.at(node, j, [0, 0, 0, 0])
+          [x1, y1, x2, y2] = Indexed.at(node, j, [0, 0, 0, 0])
 
           %{
             series: s.index,
@@ -627,6 +627,8 @@ defmodule EexCharts.Charts.Treemap do
   end
 
   defp points_from(data, labels) when is_list(data) do
+    labels = Indexed.new(labels)
+
     data
     |> Enum.with_index()
     |> Enum.map(fn {pt, j} -> to_point(pt, j, labels) end)
@@ -642,11 +644,11 @@ defmodule EexCharts.Charts.Treemap do
   defp to_point({label, value}, _j, _labels), do: %{label: to_string(label), value: num(value)}
 
   defp to_point(v, j, labels) when is_number(v) do
-    %{label: to_string(Enum.at(labels, j) || j + 1), value: v}
+    %{label: to_string(Indexed.at(labels, j) || j + 1), value: v}
   end
 
   defp to_point(_v, j, labels) do
-    %{label: to_string(Enum.at(labels, j) || j + 1), value: 0}
+    %{label: to_string(Indexed.at(labels, j) || j + 1), value: 0}
   end
 
   defp num(v) when is_number(v), do: v
@@ -678,7 +680,7 @@ defmodule EexCharts.Charts.Treemap do
     container = %{xoffset: xoff, yoffset: yoff, width: width, height: height}
 
     normalize_areas(data, width * height)
-    |> squarify([], container, [])
+    |> squarify(new_row(), container, [])
     |> Enum.concat()
   end
 
@@ -688,20 +690,40 @@ defmodule EexCharts.Charts.Treemap do
     Enum.map(data, &(&1 * multiplier))
   end
 
-  defp squarify([], currentrow, container, stack) do
-    stack ++ [get_coordinates(container, currentrow)]
+  # The row being filled keeps its running min, max and sum, which is all the
+  # aspect ratio needs, so each candidate costs O(1) instead of a pass over the
+  # row. A zero area makes every ratio `:infinity`, and the row then takes all
+  # remaining items; recomputing over the row made that quadratic. Rows and
+  # their items are accumulated in reverse and flipped once.
+  defp squarify([], row, container, acc) do
+    Enum.reverse([get_coordinates(container, row_items(row)) | acc])
   end
 
-  defp squarify([next | rest] = data, currentrow, container, stack) do
+  defp squarify([next | rest] = data, row, container, acc) do
     length = min(container.height, container.width)
 
-    if improves_ratio?(currentrow, next, length) do
-      squarify(rest, currentrow ++ [next], container, stack)
+    if improves_ratio?(row, next, length) do
+      squarify(rest, add_to_row(row, next), container, acc)
     else
-      newcontainer = cut_area(container, sum_array(currentrow))
-      squarify(data, [], newcontainer, stack ++ [get_coordinates(container, currentrow)])
+      newcontainer = cut_area(container, row.sum)
+      squarify(data, new_row(), newcontainer, [get_coordinates(container, row_items(row)) | acc])
     end
   end
+
+  defp new_row, do: %{items: [], min: nil, max: nil, sum: 0}
+
+  defp add_to_row(%{items: []}, v), do: %{items: [v], min: v, max: v, sum: 0 + v}
+
+  defp add_to_row(row, v) do
+    %{
+      items: [v | row.items],
+      min: Kernel.min(row.min, v),
+      max: Kernel.max(row.max, v),
+      sum: row.sum + v
+    }
+  end
+
+  defp row_items(row), do: Enum.reverse(row.items)
 
   defp get_coordinates(%{width: width, height: height} = c, row) do
     sum = sum_array(row)
@@ -749,18 +771,13 @@ defmodule EexCharts.Charts.Treemap do
     end
   end
 
-  defp improves_ratio?([], _next, _length), do: true
+  defp improves_ratio?(%{items: []}, _next, _length), do: true
 
-  defp improves_ratio?(currentrow, next, length) do
-    newrow = currentrow ++ [next]
-    calculate_ratio(currentrow, length) >= calculate_ratio(newrow, length)
+  defp improves_ratio?(row, next, length) do
+    calculate_ratio(row, length) >= calculate_ratio(add_to_row(row, next), length)
   end
 
-  defp calculate_ratio(row, length) do
-    min = Enum.min(row)
-    max = Enum.max(row)
-    sum = sum_array(row)
-
+  defp calculate_ratio(%{min: min, max: max, sum: sum}, length) do
     cond do
       sum == 0 -> :infinity
       min == 0 -> :infinity

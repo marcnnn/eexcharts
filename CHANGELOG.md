@@ -128,6 +128,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is unchanged, as the SVG goldens confirm. CI runs the suite on 1.20 as well,
   and the format and warning gates moved to it.
 
+### Performance
+
+- Render time grows linearly with the number of points. Several loops read
+  the data, categories, labels or palette by position with `Enum.at/2` inside
+  a loop over positions, which made them quadratic: a 32,000-point smooth
+  line took about 36 s and a stacked bar of the same size about 39 s. They
+  now read from tuples (`EexCharts.Indexed`), and the squarified treemap keeps
+  its row's running min, max and sum instead of rescanning the row, so a zero
+  value no longer makes it quadratic. Those charts now render in 1-3 s.
+  Output is unchanged: the SVG goldens are byte-identical.
+- `EexCharts.SVG.esc/1` returns text with nothing to escape as is, instead of
+  running five replace passes over it.
+
 ## v0.1.1 — 2026-09-03
 
 ### Fixed

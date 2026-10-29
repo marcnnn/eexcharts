@@ -637,6 +637,7 @@ defmodule EexCharts.Layout do
   def series_points(cfg, data) do
     xt = x_type(cfg)
     cats = cfg.xaxis.categories
+    cats_t = EexCharts.Indexed.new(cats)
 
     data
     |> Enum.with_index()
@@ -645,7 +646,7 @@ defmodule EexCharts.Layout do
 
       x =
         if is_number(v) and cats != [] and xt in [:numeric, :datetime] do
-          to_x(Enum.at(cats, j), xt)
+          to_x(EexCharts.Indexed.at(cats_t, j), xt)
         else
           x
         end
