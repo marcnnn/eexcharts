@@ -170,6 +170,62 @@ defmodule EexCharts.DaisyThemeTest do
     end
   end
 
+  describe "annotations" do
+    @annos %{
+      yaxis: [%{y: 40, label: %{text: "Target"}}],
+      xaxis: [%{x: "B", label: %{text: "Now"}}],
+      points: [%{x: "C", y: 30, label: %{text: "Peak"}}]
+    }
+
+    test "label pills and point markers follow the chart surface" do
+      cfg = build(:line, %{annotations: @annos})
+
+      for kind <- [:yaxis, :xaxis, :points] do
+        [anno] = cfg.annotations[kind]
+        assert anno.label.style.background == "var(--color-base-100, #fff)"
+        assert anno.label.border_color == "var(--color-base-300, #c2c2c2)"
+      end
+
+      [point] = cfg.annotations.points
+      assert point.marker.fill_color == "var(--color-base-100, #fff)"
+      assert point.marker.stroke_color == "var(--color-base-content, #333)"
+      refute Map.has_key?(hd(cfg.annotations.yaxis), :marker)
+    end
+
+    test "keeps colours the user set" do
+      annos = %{
+        yaxis: [%{y: 40, label: %{border_color: "#f00", style: %{background: "#ff6105"}}}],
+        points: [%{x: "C", y: 30, marker: %{fill_color: "#0f0"}}]
+      }
+
+      cfg = build(:line, %{annotations: annos})
+      [y] = cfg.annotations.yaxis
+      assert y.label.style.background == "#ff6105"
+      assert y.label.border_color == "#f00"
+      [p] = cfg.annotations.points
+      assert p.marker.fill_color == "#0f0"
+    end
+
+    test "static output resolves to the ApexCharts defaults" do
+      svg =
+        EexCharts.to_svg("a", :line, [%{name: "S", data: [10, 50, 30]}],
+          categories: ~w(A B C),
+          options: %{theme: %{mode: :daisy}, annotations: @annos}
+        )
+
+      refute svg =~ "var("
+      assert svg =~ ~s(fill="#fff")
+      assert svg =~ ~s(stroke="#c2c2c2")
+    end
+
+    test "light and dark annotations are untouched" do
+      for mode <- [:light, :dark] do
+        cfg = Config.build(:line, %{theme: %{mode: mode}, annotations: @annos})
+        assert cfg.annotations == @annos
+      end
+    end
+  end
+
   describe "rendered output" do
     test "series marks reference the daisyUI variables" do
       html =

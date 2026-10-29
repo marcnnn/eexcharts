@@ -161,6 +161,7 @@ defmodule EexCharts.Theme do
   defp apply_daisy(cfg, opts) do
     cfg
     |> daisy_series(opts)
+    |> daisy_annotations()
     |> put_unless_set([:chart, :fore_color], @daisy_fore, opts)
     |> put_unless_set([:grid, :border_color], @daisy_border, opts)
     |> put_unless_set([:xaxis, :axis_border, :color], @daisy_border, opts)
@@ -198,6 +199,52 @@ defmodule EexCharts.Theme do
       not is_nil(cfg.colors) or not is_nil(opts[:colors]) -> cfg
       pal = cfg.theme.palette -> %{cfg | colors: palette(pal)}
       true -> cfg |> Map.put(:colors, @daisy_colors) |> daisy_label_colors(opts)
+    end
+  end
+
+  # Annotation label pills and point markers default to a white box with grey
+  # and #333 edges (ApexCharts Options.js). Their text is `chart.fore_color`,
+  # which daisyUI makes base-content: light on a dark theme, so on the white
+  # pill it vanished. Pills and markers the user did not colour follow the
+  # surface instead; the fallbacks keep static output on the ApexCharts values.
+  @daisy_annotation_border "var(--color-base-300, #c2c2c2)"
+  @daisy_annotation_marker "var(--color-base-content, #333)"
+
+  defp daisy_annotations(%{annotations: %{} = annos} = cfg) do
+    annos =
+      Map.new(annos, fn
+        {kind, items} when is_list(items) -> {kind, Enum.map(items, &daisy_annotation/1)}
+        other -> other
+      end)
+
+    %{cfg | annotations: annos}
+  end
+
+  defp daisy_annotations(cfg), do: cfg
+
+  defp daisy_annotation(%{} = anno) do
+    anno
+    |> put_new_in([:label, :border_color], @daisy_annotation_border)
+    |> put_new_in([:label, :style, :background], @daisy_surface)
+    |> daisy_annotation_marker()
+  end
+
+  defp daisy_annotation(other), do: other
+
+  defp daisy_annotation_marker(%{x: _, y: _} = anno) do
+    anno
+    |> put_new_in([:marker, :fill_color], @daisy_surface)
+    |> put_new_in([:marker, :stroke_color], @daisy_annotation_marker)
+  end
+
+  defp daisy_annotation_marker(anno), do: anno
+
+  defp put_new_in(map, [key], value), do: Map.put_new(map, key, value)
+
+  defp put_new_in(map, [key | rest], value) do
+    case Map.get(map, key, %{}) do
+      %{} = inner -> Map.put(map, key, put_new_in(inner, rest, value))
+      _ -> map
     end
   end
 
