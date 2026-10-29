@@ -334,7 +334,9 @@ defmodule EexCharts.Config do
           is_funnel: false,
           is_funnel_3d: true,
           is_dumbbell: false,
-          dumbbell_colors: nil
+          dumbbell_colors: nil,
+          # Default colour of data-point goals (see `EexCharts.Goals`).
+          goals: %{stroke_color: "#a8a8a8"}
         },
         candlestick: %{
           colors: %{upward: "#00B746", downward: "#EF403C"},

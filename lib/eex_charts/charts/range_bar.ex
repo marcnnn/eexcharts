@@ -9,12 +9,13 @@ defmodule EexCharts.Charts.RangeBar do
   slot (`slot / series_count * column_width%`); when the layout is horizontal
   (`plot_options.bar.horizontal`), bars run from `x_for(from)` to `x_for(to)`
   using `bar_height%`. `plot_options.bar.border_radius` rounds both ends,
-  reusing `Charts.Bar.bar_path/3`.
+  reusing `Charts.Bar.bar_path/3`. Data points may carry `goals` (see
+  `EexCharts.Goals`).
   """
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, Layout, PointStyle}
+  alias EexCharts.{Charts, Config, Goals, Layout, PointStyle}
 
   @doc "Renders range bar series into the cartesian grid."
   def render(cfg, series, l, opts \\ [])
@@ -61,7 +62,7 @@ defmodule EexCharts.Charts.RangeBar do
         end)
       )
     end)
-    |> then(&[defs, &1])
+    |> then(&[defs, &1, Goals.render(cfg, series, rects, l)])
   end
 
   defp positions(cfg, series, %Layout{horizontal: true} = l) do

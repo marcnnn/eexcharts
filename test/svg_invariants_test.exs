@@ -140,6 +140,10 @@ defmodule EexCharts.SvgInvariantsTest do
   # gradient legend is a colour bar with no items at all.
   defp expected_legend_entries(%{type: t}) when t in [:waterfall, :dumbbell], do: nil
 
+  # `legend.custom_legend_items` replaces the series names.
+  defp expected_legend_entries(%{options: %{legend: %{custom_legend_items: [_ | _] = items}}}),
+    do: length(items)
+
   defp expected_legend_entries(%{type: :heatmap, options: %{legend: %{gradient: g}}})
        when g not in [nil, false],
        do: nil

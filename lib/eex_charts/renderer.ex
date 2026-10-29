@@ -127,7 +127,8 @@ defmodule EexCharts.Renderer do
     series = Stacking.annotate(cfg, series, n)
 
     base_range =
-      if Stacking.enabled?(cfg), do: Stacking.data_range(series), else: data_range(cfg, series)
+      if(Stacking.enabled?(cfg), do: Stacking.data_range(series), else: data_range(cfg, series))
+      |> EexCharts.Goals.extend_range(series)
 
     {y_min, y_max} = log_axis_range(cfg, hd(Config.yaxes(cfg)), series, base_range)
 
@@ -1270,11 +1271,14 @@ defmodule EexCharts.Renderer do
                   Charts.Waterfall.tooltip_rows(cfg, s, v)
 
                 true ->
-                  tooltip_row(
-                    Config.color_at(cfg, s.index),
-                    s.name,
-                    Stacking.tooltip_value(s, j, tooltip_value(cfg, v))
-                  )
+                  [
+                    tooltip_row(
+                      Config.color_at(cfg, s.index),
+                      s.name,
+                      Stacking.tooltip_value(s, j, tooltip_value(cfg, v))
+                    ),
+                    goal_rows(cfg, s, j)
+                  ]
               end
             end)
 
@@ -1287,6 +1291,17 @@ defmodule EexCharts.Renderer do
       tooltip_container(cfg, tips ++ anno_tips)
     else
       if anno_tips == [], do: [], else: tooltip_container(cfg, anno_tips)
+    end
+  end
+
+  # v4.7.0 lists a point's goals under its value.
+  defp goal_rows(cfg, s, j) do
+    for g <- EexCharts.Goals.of(s, j) do
+      tooltip_row(
+        EexCharts.Goals.color(cfg, g),
+        to_string(g[:name] || ""),
+        format_tooltip_y(cfg, g.value)
+      )
     end
   end
 

@@ -75,6 +75,9 @@ defmodule EexCharts.Theme do
   @daisy_track "var(--color-base-200, #f2f2f2)"
   @daisy_border "var(--color-base-300, #e0e0e0)"
   @daisy_border_soft "var(--color-base-300, #e8e8e8)"
+  # Goal markers sit on the page, beside or over a bar; base-content contrasts
+  # with every daisyUI surface.
+  @daisy_goal "var(--color-base-content, #a8a8a8)"
 
   @doc "Returns the named palette (`:palette1`..`:palette10`, `:chartjs`), or palette1."
   def palette(name), do: Map.get(@palettes, name, @palettes.palette1)
@@ -93,8 +96,8 @@ defmodule EexCharts.Theme do
   Under `mode: :daisy` the following are mapped to daisyUI variables: the
   series palette, on-mark data label colors, `chart.fore_color`, the grid and
   x-axis border/tick colors, the white separator between adjacent marks, marker
-  stroke rings, the radial-bar track, the radar/polar-area rings and spokes,
-  and the tooltip. Setting `theme.palette` keeps daisyUI chrome but restores an
+  stroke rings, the default bar goal colour, the radial-bar track, the
+  radar/polar-area rings and spokes, and the tooltip. Setting `theme.palette` keeps daisyUI chrome but restores an
   ApexCharts palette for the series.
   """
   def apply(cfg, opts \\ %{}) do
@@ -188,6 +191,7 @@ defmodule EexCharts.Theme do
       opts
     )
     |> daisy_separator_stroke(opts)
+    |> put_unless_set([:plot_options, :bar, :goals, :stroke_color], @daisy_goal, opts)
     |> put_unless_set([:tooltip, :theme], :daisy, opts)
   end
 
