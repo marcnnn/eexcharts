@@ -103,7 +103,7 @@ defmodule EexCharts.BarFamilyTest do
       assert length(segs) == length(rects) - 1
 
       Enum.zip([segs, rects, tl(rects)])
-      |> Enum.each(fn {{x1, x2, y}, a, b} ->
+      |> Enum.each(fn {{x1, y, x2, y}, a, b} ->
         assert_in_delta x1, a.x + a.w, @eps
         assert_in_delta x2, b.x, @eps
         assert_in_delta value_at_y(l, y), a.point.total, @eps

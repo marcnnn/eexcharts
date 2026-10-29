@@ -80,6 +80,11 @@ defmodule EexCharts.Theme do
   # with every daisyUI surface.
   @daisy_goal "var(--color-base-content, #a8a8a8)"
 
+  # Waterfall bar kinds and their connector (`EexCharts.Charts.Waterfall`).
+  @daisy_waterfall %{increase: "success", decrease: "error", total: "primary"}
+  @waterfall_fallbacks %{increase: "#00E396", decrease: "#FF4560", total: "#008FFB"}
+  @daisy_connector "var(--color-base-300, #a8a8a8)"
+
   @doc "Returns the named palette (`:palette1`..`:palette10`, `:chartjs`), or palette1."
   def palette(name), do: Map.get(@palettes, name, @palettes.palette1)
 
@@ -99,8 +104,9 @@ defmodule EexCharts.Theme do
   x-axis border/tick colors, the white separator between adjacent marks, marker
   stroke rings, the default bar goal colour, the radial-bar and level-meter
   tracks, the level meter's below-target colour, the radar/polar-area rings and
-  spokes, and the tooltip. Setting `theme.palette` keeps daisyUI chrome but restores an
-  ApexCharts palette for the series.
+  spokes, the waterfall kind, label and connector colors, and the tooltip.
+  Setting `theme.palette` keeps daisyUI chrome but restores an ApexCharts
+  palette for the series.
   """
   def apply(cfg, opts \\ %{}) do
     case cfg.theme.mode do
@@ -210,6 +216,7 @@ defmodule EexCharts.Theme do
     )
     |> daisy_separator_stroke(opts)
     |> put_unless_set([:plot_options, :bar, :goals, :stroke_color], @daisy_goal, opts)
+    |> daisy_waterfall(opts)
     |> put_unless_set([:tooltip, :theme], :daisy, opts)
   end
 
@@ -246,6 +253,42 @@ defmodule EexCharts.Theme do
       cfg
     end
   end
+
+  # A kind given as `:outline` or as a map without `:color` still wants the
+  # daisyUI colour; a kind given a colour keeps it. Labels on a daisy-coloured
+  # kind take its paired content colour, labels on a user-coloured kind the
+  # type's own white (as for a user palette), unless label colours were set.
+  defp daisy_waterfall(%{chart: %{type: :waterfall}} = cfg, opts) do
+    wf = [:plot_options, :waterfall]
+
+    {colors, label_colors} =
+      Enum.reduce(@daisy_waterfall, {%{}, %{}}, fn {kind, name}, {colors, labels} ->
+        var = "var(--color-#{name}, #{@waterfall_fallbacks[kind]})"
+
+        case get_in(opts, wf ++ [:colors, kind]) do
+          color when is_binary(color) ->
+            {Map.put(colors, kind, color), Map.put(labels, kind, "#fff")}
+
+          spec ->
+            {Map.put(colors, kind, daisy_kind(spec, var)),
+             Map.put(labels, kind, "var(--color-#{name}-content, #fff)")}
+        end
+      end)
+
+    label_colors =
+      if get_in(opts, [:data_labels, :style, :colors]), do: %{}, else: label_colors
+
+    cfg
+    |> update_in(wf ++ [:colors], &Map.merge(&1, colors))
+    |> update_in(wf ++ [:label_colors], &Map.merge(label_colors, &1 || %{}))
+    |> put_unless_set(wf ++ [:connector, :color], @daisy_connector, opts)
+  end
+
+  defp daisy_waterfall(cfg, _opts), do: cfg
+
+  defp daisy_kind(nil, var), do: var
+  defp daisy_kind(:outline, var), do: %{color: var, fill: %{type: :none}}
+  defp daisy_kind(%{} = spec, var), do: Map.put_new(spec, :color, var)
 
   defp put_unless_set(cfg, path, value, opts) do
     if is_nil(get_in(opts, path)), do: put_in(cfg, path, value), else: cfg
