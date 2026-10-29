@@ -41,7 +41,15 @@ defmodule Dev.ChartExamples do
     Dev.ChartExamples.HeatmapAxes,
     Dev.ChartExamples.Unit,
     Dev.ChartExamples.Labels,
-    Dev.ChartExamples.Trellis
+    Dev.ChartExamples.Trellis,
+    Dev.ChartExamples.PointStyle,
+    Dev.ChartExamples.HeatmapTable,
+    Dev.ChartExamples.Goals,
+    Dev.ChartExamples.Sparkline,
+    Dev.ChartExamples.LevelMeter,
+    Dev.ChartExamples.EndLabels,
+    Dev.ChartExamples.WaterfallHorizontal,
+    Dev.ChartExamples.Timeline
   ]
 
   @doc """
