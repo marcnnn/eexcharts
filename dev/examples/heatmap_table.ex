@@ -35,6 +35,51 @@ defmodule Dev.ChartExamples.HeatmapTable do
           data_labels: %{enabled: true, style: %{font_size: 14, font_weight: 700}},
           legend: %{show: false}
         }
+      },
+      %{
+        id: "ht2",
+        title: "Heatmap - rows top to bottom, x-axis on top",
+        group: :heatmap,
+        type: :heatmap,
+        series:
+          for {name, k} <- Enum.with_index(["Row A", "Row B", "Row C", "Row D", "Row E"]) do
+            %{name: name, data: for(j <- 0..7, do: rem(j * 13 + k * 29, 70) + 20)}
+          end,
+        categories: for(j <- 1..8, do: "Item 0#{j}"),
+        options: %{
+          chart: %{width: 640, height: 320},
+          data_labels: %{enabled: true},
+          xaxis: %{position: :top},
+          plot_options: %{
+            heatmap: %{
+              reverse_rows: true,
+              color_scale: %{
+                ranges: [
+                  %{from: 0, to: 49, color: "#FF4560", name: "Below 50"},
+                  %{from: 50, to: 74, color: "#FEB019", name: "50-74"},
+                  %{from: 75, to: 100, color: "#00A100", name: "75-100"}
+                ]
+              }
+            }
+          }
+        }
+      },
+      %{
+        id: "ht3",
+        title: "Heatmap - numeric x-axis on top, gradient legend",
+        group: :heatmap,
+        type: :heatmap,
+        series:
+          for {name, k} <- Enum.with_index(["Group 1", "Group 2", "Group 3"]) do
+            %{name: name, data: for(h <- 0..23, do: %{x: h, y: rem(h * 5 + k * 17, 31) + 2})}
+          end,
+        options: %{
+          chart: %{width: 640, height: 260},
+          colors: ["#00A100"],
+          xaxis: %{type: :numeric, position: :top},
+          legend: %{gradient: %{position: :top}},
+          plot_options: %{heatmap: %{reverse_rows: true}}
+        }
       }
     ]
   end

@@ -165,6 +165,13 @@ defmodule EexCharts.SvgInvariantsTest do
        when g not in [nil, false],
        do: nil
 
+  # Heatmap colour ranges: one entry per range instead of per series.
+  defp expected_legend_entries(%{
+         type: :heatmap,
+         options: %{plot_options: %{heatmap: %{color_scale: %{ranges: [_ | _] = ranges}}}}
+       }),
+       do: length(ranges)
+
   # Sunburst: one entry per top-level branch, which is each point of a single
   # series, or each series when there are several.
   defp expected_legend_entries(%{type: :sunburst, series: [%{data: data}]}), do: length(data)
