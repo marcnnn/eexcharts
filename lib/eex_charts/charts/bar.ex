@@ -13,14 +13,17 @@ defmodule EexCharts.Charts.Bar do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Config, Layout}
+  alias EexCharts.{Config, Layout, PointStyle}
 
-  @doc "Renders all bar series as an SVG group; returns `{iodata, bar_rects}`."
+  @doc """
+  Renders all bar series as an SVG group; returns `{iodata, bar_rects}`.
+  `opts[:id]` (the chart id) scopes pattern fill ids.
+  """
   def render(cfg, series, %Layout{} = l, opts \\ []) do
-    bars = positions(cfg, series, l)
+    {bars, defs} = cfg |> positions(series, l) |> PointStyle.link(opts[:id] || "eexcharts")
     on_click = opts[:on_click]
 
-    io =
+    groups =
       bars
       |> Enum.group_by(& &1.series)
       |> Enum.sort_by(fn {i, _} -> i end)
@@ -29,13 +32,13 @@ defmodule EexCharts.Charts.Bar do
           EexCharts.Charts.Funnel.connectors(cfg, rects),
           Enum.map(rects, fn r ->
             attrs = %{
-              class: "eexcharts-bar",
+              class: class(r.style),
               data_j: r.index,
               d: bar_path(cfg, r, l.horizontal),
-              fill: r.color,
-              fill_opacity: cfg.fill.opacity,
-              stroke: stroke_color(cfg, i, r.color),
-              stroke_width: cfg.stroke.width
+              fill: r.style.fill,
+              fill_opacity: r.style.fill_opacity,
+              stroke: r.style.stroke || stroke_color(cfg, i, r.color),
+              stroke_width: r.style.stroke_width
             }
 
             attrs =
@@ -55,14 +58,52 @@ defmodule EexCharts.Charts.Bar do
         ])
       end)
 
-    {io, bars}
+    {[defs, groups], bars}
   end
+
+  defp class(%{class: nil}), do: "eexcharts-bar"
+  defp class(%{class: class}), do: "eexcharts-bar " <> class
 
   @doc """
   Computes every bar rectangle: `%{series, index, x, y, w, h, value, color,
-  positive}` with `{x, y}` the top-left corner.
+  positive, style}` with `{x, y}` the top-left corner and `style` the
+  `EexCharts.PointStyle` paint of the bar.
   """
   def positions(cfg, series, %Layout{} = l) do
+    cfg |> geometry(series, l) |> with_styles(cfg, series)
+  end
+
+  # Map points keep their `fill_color` & co. under `source_data` (see
+  # `prepare/1`).
+  defp with_styles(rects, cfg, series) do
+    by_index = Map.new(series, &{&1.index, &1})
+
+    Enum.map(rects, fn r ->
+      s = by_index[r.series]
+      point = Enum.at(s[:source_data] || s.data, r.index)
+      Map.put(r, :style, PointStyle.resolve(cfg, s, point, r.color))
+    end)
+  end
+
+  @doc """
+  Bars draw numbers. `%{x:, y:}` points (which may carry per-point paint like
+  `fill_color`) are reduced to their `y`, and the original points kept under
+  `source_data` for `EexCharts.PointStyle`.
+  """
+  def prepare(series) do
+    Enum.map(series, fn s ->
+      if Enum.any?(s.data, &match?(%{y: _}, &1)) do
+        Map.merge(s, %{data: Enum.map(s.data, &bar_value/1), source_data: s.data})
+      else
+        s
+      end
+    end)
+  end
+
+  defp bar_value(%{y: y}), do: y
+  defp bar_value(v), do: v
+
+  defp geometry(cfg, series, l) do
     cond do
       EexCharts.Charts.StackGroups.applies?(cfg, series) ->
         EexCharts.Charts.StackGroups.positions(cfg, series, l)

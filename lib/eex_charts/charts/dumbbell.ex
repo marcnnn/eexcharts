@@ -32,6 +32,11 @@ defmodule EexCharts.Charts.Dumbbell do
     * `stroke.colors` — connector colour per series (falls back to the series
       colour; the shorthand uses a neutral grey).
 
+  A map data point may carry `fill_color` / `stroke_color` (and a `fill`
+  map, see `EexCharts.PointStyle`): `fill_color` paints both dots and the
+  connector, `stroke_color` the connector and the dot outlines, so one row
+  can be flagged. A series or point `fill: %{type: :none}` draws hollow dots.
+
   ## Legend
 
   A series with `ends: [start_label, end_label]` contributes one legend item
@@ -42,7 +47,7 @@ defmodule EexCharts.Charts.Dumbbell do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, Layout}
+  alias EexCharts.{Charts, Config, Layout, PointStyle}
 
   @doc "Config applied when `is_dumbbell` is on (ApexCharts `Defaults.dumbbell()`)."
   def defaults do
@@ -133,9 +138,9 @@ defmodule EexCharts.Charts.Dumbbell do
   @doc "Renders dumbbell series into the cartesian grid."
   def render(cfg, series, %Layout{} = l, opts \\ []) do
     on_click = opts[:on_click]
+    {dbs, defs} = series |> positions(cfg, l) |> link_patterns(opts[:id] || "eexcharts")
 
-    series
-    |> positions(cfg, l)
+    dbs
     |> Enum.group_by(& &1.series)
     |> Enum.sort_by(fn {i, _} -> i end)
     |> Enum.map(fn {i, dbs} ->
@@ -158,50 +163,79 @@ defmodule EexCharts.Charts.Dumbbell do
               },
               else: %{}
 
-          dot = fn {x, y}, color, which ->
+          dot = fn {x, y}, style, which ->
             el(
               "circle",
-              Map.merge(
-                %{
-                  class: "eexcharts-dumbbell-dot eexcharts-dumbbell-#{which}",
-                  data_j: d.index,
-                  cx: x,
-                  cy: y,
-                  r: r,
-                  fill: color,
-                  stroke: dot_stroke,
-                  stroke_width: if(dot_stroke, do: dot_stroke_w)
-                },
-                click
-              )
+              %{
+                class: "eexcharts-dumbbell-dot eexcharts-dumbbell-#{which}",
+                data_j: d.index,
+                cx: x,
+                cy: y,
+                r: r
+              }
+              |> Map.merge(dot_paint(style, dot_stroke, dot_stroke_w))
+              |> Map.merge(click)
             )
           end
 
           {x1, y1} = d.from
           {x2, y2} = d.to
 
-          el("g", %{class: "eexcharts-bar", data_j: d.index}, [
+          class = Enum.join(["eexcharts-bar" | List.wrap(d.start_style.class)], " ")
+
+          el("g", %{class: class, data_j: d.index}, [
             el("line", %{
               class: "eexcharts-dumbbell-line",
               x1: x1,
               y1: y1,
               x2: x2,
               y2: y2,
-              stroke: line_color,
+              stroke: d.line_color || line_color,
               stroke_width: d.thickness,
               stroke_linecap: "round"
             }),
-            dot.(d.from, d.start_color, "start"),
-            dot.(d.to, d.end_color, "end")
+            dot.(d.from, d.start_style, "start"),
+            dot.(d.to, d.end_style, "end")
           ])
         end)
       )
     end)
+    |> then(&[defs, &1])
+  end
+
+  # An unstyled dot keeps the `markers.stroke_*` outline; a hollow one is
+  # outlined in its own colour; a styled one may swap the outline colour.
+  defp dot_paint(%{class: nil} = style, stroke, width),
+    do: %{fill: style.fill, stroke: stroke, stroke_width: if(stroke, do: width)}
+
+  defp dot_paint(%{fill: "none"} = style, _stroke, _width),
+    do: %{fill: "none", stroke: style.stroke, stroke_width: style.stroke_width}
+
+  defp dot_paint(style, stroke, width) do
+    stroke = style.stroke || stroke
+    %{fill: style.fill, stroke: stroke, stroke_width: if(stroke, do: width || style.stroke_width)}
+  end
+
+  # Both dots of every dumbbell share one pattern registry.
+  defp link_patterns(dbs, id) do
+    {styles, defs} =
+      dbs
+      |> Enum.flat_map(&[%{style: &1.start_style}, %{style: &1.end_style}])
+      |> PointStyle.link(id)
+
+    dbs =
+      styles
+      |> Enum.chunk_every(2)
+      |> Enum.zip_with(dbs, fn [a, b], d -> %{d | start_style: a.style, end_style: b.style} end)
+
+    {dbs, defs}
   end
 
   @doc """
   One entry per data point: `%{series, index, from: {x, y}, to: {x, y},
-  thickness, start_color, end_color}` in SVG coordinates.
+  thickness, start_color, end_color, start_style, end_style, line_color}` in
+  SVG coordinates; the styles are `EexCharts.PointStyle` paint and
+  `line_color` is the point's own connector colour, or `nil`.
   """
   def positions(series, cfg, %Layout{} = l) do
     n_series = max(length(series), 1)
@@ -247,7 +281,10 @@ defmodule EexCharts.Charts.Dumbbell do
                 to: b,
                 thickness: thickness,
                 start_color: c0,
-                end_color: c1
+                end_color: c1,
+                start_style: PointStyle.resolve(cfg, s, p, c0),
+                end_style: PointStyle.resolve(cfg, s, p, c1),
+                line_color: PointStyle.line_color(p)
               }
             ]
 

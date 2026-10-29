@@ -14,7 +14,7 @@ defmodule EexCharts.Charts.RangeBar do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Charts, Config, Layout}
+  alias EexCharts.{Charts, Config, Layout, PointStyle}
 
   @doc "Renders range bar series into the cartesian grid."
   def render(cfg, series, l, opts \\ [])
@@ -25,9 +25,9 @@ defmodule EexCharts.Charts.RangeBar do
 
   def render(cfg, series, %Layout{} = l, opts) do
     on_click = opts[:on_click]
+    {rects, defs} = cfg |> positions(series, l) |> PointStyle.link(opts[:id] || "eexcharts")
 
-    cfg
-    |> positions(series, l)
+    rects
     |> Enum.group_by(& &1.series)
     |> Enum.sort_by(fn {i, _} -> i end)
     |> Enum.map(fn {_i, rects} ->
@@ -36,13 +36,13 @@ defmodule EexCharts.Charts.RangeBar do
         %{class: "eexcharts-series"},
         Enum.map(rects, fn r ->
           attrs = %{
-            class: "eexcharts-bar",
+            class: Enum.join(["eexcharts-bar" | List.wrap(r.style.class)], " "),
             data_j: r.index,
             d: Charts.Bar.bar_path(cfg, r, l.horizontal),
-            fill: r.color,
-            fill_opacity: cfg.fill.opacity,
-            stroke: stroke_color(cfg, r.series, r.color),
-            stroke_width: cfg.stroke.width
+            fill: r.style.fill,
+            fill_opacity: r.style.fill_opacity,
+            stroke: r.style.stroke || stroke_color(cfg, r.series, r.color),
+            stroke_width: r.style.stroke_width
           }
 
           attrs =
@@ -61,6 +61,7 @@ defmodule EexCharts.Charts.RangeBar do
         end)
       )
     end)
+    |> then(&[defs, &1])
   end
 
   defp positions(cfg, series, %Layout{horizontal: true} = l) do
@@ -92,7 +93,8 @@ defmodule EexCharts.Charts.RangeBar do
                 h: bar_h,
                 color: color,
                 positive: to >= from,
-                last_in_stack: true
+                last_in_stack: true,
+                style: PointStyle.resolve(cfg, s, p, color)
               }
             ]
 
@@ -132,7 +134,8 @@ defmodule EexCharts.Charts.RangeBar do
                 h: abs(y_from - y_to),
                 color: color,
                 positive: to >= from,
-                last_in_stack: true
+                last_in_stack: true,
+                style: PointStyle.resolve(cfg, s, p, color)
               }
             ]
 
