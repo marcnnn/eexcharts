@@ -150,6 +150,11 @@ defmodule EexCharts.Layout do
     grid_w = max(w - grid_x - right, 10)
     grid_h = max(h - grid_y - bottom, 10)
 
+    {grid_x, grid_y, grid_w, grid_h} =
+      if Config.sparkline?(cfg),
+        do: sparkline_grid(cfg, w, h, title_h),
+        else: {grid_x, grid_y, grid_w, grid_h}
+
     x_scale = build_x_scale(cfg, x_range, grid_w)
 
     # A timeline (horizontal range bars, `xaxis.type: :datetime`) keeps its
@@ -167,6 +172,7 @@ defmodule EexCharts.Layout do
     # labels are clipped by the SVG viewBox.
     {x_pad_left, x_pad_right} =
       cond do
+        Config.sparkline?(cfg) -> {0, 0}
         x_scale -> x_label_overhang(cfg, x_scale)
         value_labels -> time_label_overhang(cfg, primary, value_labels, grid_w)
         true -> category_edge_overhang(cfg, n, horizontal, grid_x, right)
@@ -204,6 +210,65 @@ defmodule EexCharts.Layout do
   # `EexCharts.EndLabels.prepare/2`; 0 unless they are on.
   defp end_label_reserve(%{end_labels: %{enabled: true, reserve: w}}), do: w
   defp end_label_reserve(_cfg), do: 0
+
+  # ── Sparkline ──────────────────────────────────────────────────────────────
+  #
+  # ApexCharts' `Dimensions.plotCoords` for `chart.sparkline`: no axis gutters,
+  # no x-label band and no legend space, so the plot fills the SVG minus the
+  # grid padding (zero by default, see `Config.sparkline?/1`). Each padding
+  # side is raised to what the marks need: half the stroke width at the top
+  # and bottom, and on every side the marker pad.
+  defp sparkline_grid(cfg, w, h, title_h) do
+    pad = cfg.grid.padding
+    m = sparkline_marker_pad(cfg)
+    stroke = sparkline_stroke_pad(cfg)
+
+    left = max(pad.left, m)
+    right = max(pad.right, m)
+    top = pad.top |> max(m) |> max(stroke)
+    bottom = pad.bottom |> max(m) |> max(stroke)
+
+    grid_y = title_h + top
+    {left, grid_y, max(w - left - right, 1), max(h - grid_y - bottom, 1)}
+  end
+
+  # ApexCharts pads by `largestSize / 1.5`, where `largestSize` is the marker
+  # radius plus the hover growth. With the default hover offset of 3 that
+  # still cuts a marker's outline at the edge (radius 4 + stroke 2 against a
+  # 4.7px pad), so the pad is at least the drawn marker: radius plus half its
+  # stroke.
+  defp sparkline_marker_pad(cfg) do
+    mk = cfg.markers
+
+    size =
+      [mk.size | Enum.map(mk.discrete, &(&1[:size] || 0))]
+      |> List.flatten()
+      |> Enum.filter(&is_number/1)
+      |> Enum.max(fn -> 0 end)
+
+    if size > 0 do
+      hover = if is_number(mk.hover.size), do: mk.hover.size, else: size + mk.hover.size_offset
+
+      stroke_w =
+        mk.stroke_width |> List.wrap() |> Enum.filter(&is_number/1) |> Enum.max(fn -> 0 end)
+
+      max(hover / 1.5, size + stroke_w / 2)
+    else
+      0
+    end
+  end
+
+  defp sparkline_stroke_pad(cfg) do
+    if cfg.stroke.show == false do
+      0
+    else
+      cfg.stroke.width
+      |> List.wrap()
+      |> Enum.filter(&is_number/1)
+      |> Enum.max(fn -> 0 end)
+      |> Kernel./(2)
+    end
+  end
 
   # Chooses the appropriate scale (linear/nice or logarithmic) for one y-axis.
   defp axis_scale(axis, mn, mx, svg_dim) do

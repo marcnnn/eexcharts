@@ -392,11 +392,23 @@ defmodule EexCharts.Renderer do
         xmlns: "http://www.w3.org/2000/svg",
         class: "eexcharts-svg",
         font_family: cfg.chart.font_family,
+        shape_rendering: sparkline_shape_rendering(cfg),
         style: svg_style(cfg, l)
       },
       children
     )
   end
+
+  # A sparkline's bars are a few pixels wide and their edges land on half
+  # pixels (a 160px row of 16 bars puts the first at x = 1.5), so a static
+  # render blurs every edge. Snap them; lines and arcs keep anti-aliasing.
+  @crisp_types [:bar, :range_bar, :waterfall, :histogram]
+
+  defp sparkline_shape_rendering(%{chart: %{type: type}} = cfg) when type in @crisp_types do
+    if Config.sparkline?(cfg), do: "crispEdges"
+  end
+
+  defp sparkline_shape_rendering(_cfg), do: nil
 
   defp svg_style(cfg, l) do
     if cfg.chart.pixel_perfect,

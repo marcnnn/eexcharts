@@ -14,12 +14,29 @@ defmodule EexCharts.SvgInvariantsTest do
 
   alias EexCharts.SvgInvariants
 
+  @sparkline_hover "sparkline: the plot fills the SVG, so the hover marker on the first " <>
+                     "and last point (live output only) overhangs the edge, as in ApexCharts " <>
+                     "v4.7.0; reserving room for it would shrink a 24px plot. Drawn markers are " <>
+                     "padded and stay inside"
+
   # Deliberate exceptions: the check is too strict for an intentional design.
   # Each entry matches violations by example id (a string, or `:any`), check
   # and a regex (string, OTP 28 cannot store compiled regexes in attributes) on
   # the element description, and carries its reason.
   @allow [
     # %{id: "x1", check: :text_overlap, element: "...", reason: "..."}
+    %{
+      id: "sp3",
+      check: :bounds,
+      element: "^circle\\.eexcharts-hover-marker",
+      reason: @sparkline_hover
+    },
+    %{
+      id: "sp4",
+      check: :bounds,
+      element: "^circle\\.eexcharts-hover-marker",
+      reason: @sparkline_hover
+    }
   ]
 
   # Real renderer defects found by this suite and not fixed yet. Same shape as `@allow`, plus `:variant` (the

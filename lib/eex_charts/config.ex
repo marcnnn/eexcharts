@@ -38,7 +38,9 @@ defmodule EexCharts.Config do
     |> deep_merge(type_defaults(type))
     |> deep_merge(EexCharts.Style.defaults(style, type))
     |> deep_merge(EexCharts.Charts.BarFamily.option_defaults(type, opts))
+    |> deep_merge(sparkline_defaults(opts))
     |> deep_merge(opts)
+    |> hide_sparkline_y_axis()
     |> Map.put(:style, style)
     |> Map.update!(:chart, &Map.put(&1, :type, type))
     |> EexCharts.Theme.apply(opts)
@@ -84,6 +86,9 @@ defmodule EexCharts.Config do
         # `"normal"` or `"100%"` (ApexCharts `chart.stackType`); see
         # EexCharts.Stacking for line/area stacking.
         stack_type: "normal",
+        # Strip axes, grid, legend, labels and padding so the chart fits a
+        # table cell (ApexCharts `chart.sparkline`); see `sparkline?/1`.
+        sparkline: %{enabled: false},
         offset_x: 0,
         offset_y: 0
       },
@@ -827,6 +832,71 @@ defmodule EexCharts.Config do
   end
 
   defp type_defaults(_), do: %{}
+
+  @doc """
+  True when `chart.sparkline.enabled` is set.
+
+  A sparkline (ApexCharts v4.7.0 `chart.sparkline`) is a bare chart. The
+  options below become defaults under the user's own options, so each can be
+  switched back on (`data_labels: %{enabled: true}`, a `grid.padding` that
+  makes room for labels). As in ApexCharts, the first y-axis is hidden
+  regardless.
+
+    * `grid.show: false` and zero `grid.padding`
+    * `legend.show: false`
+    * `xaxis.labels`, `axis_border` and `axis_ticks` hidden
+    * `data_labels.enabled: false`
+    * `chart.parent_height_offset: 0`
+    * `chart.pixel_perfect: true`: the SVG keeps its `width` x `height`
+      instead of stretching to the container, and bar edges are snapped to
+      whole pixels (`shape-rendering="crispEdges"`)
+
+  `EexCharts.Layout` then gives the plot the whole SVG: no axis gutters, no
+  label band, no legend space. Only the stroke and the markers keep a margin
+  (half the stroke width at the top and bottom, the marker radius plus its
+  stroke on every side), so lines, bar edges and markers are not clipped at
+  sizes like 160 x 24. Annotations still render.
+
+  Supported: `:line`, `:area`, `:bar` (also distributed and per-point
+  `fill_color`), `:range_bar`, `:scatter`, `:pie`, `:donut`, `:radial_bar`.
+
+      chart: %{width: 160, height: 24, sparkline: %{enabled: true}}
+  """
+  def sparkline?(cfg), do: get_in(cfg, [:chart, :sparkline, :enabled]) == true
+
+  # ApexCharts `Defaults.sparkline()`, layered below the user's options.
+  defp sparkline_defaults(opts) do
+    if sparkline?(opts) do
+      %{
+        chart: %{parent_height_offset: 0, pixel_perfect: true},
+        grid: %{show: false, padding: %{top: 0, right: 0, bottom: 0, left: 0}},
+        legend: %{show: false},
+        xaxis: %{
+          labels: %{show: false},
+          axis_border: %{show: false},
+          axis_ticks: %{show: false}
+        },
+        data_labels: %{enabled: false}
+      }
+    else
+      %{}
+    end
+  end
+
+  # ApexCharts' `hideYAxis()` writes into the user's options, so the first
+  # y-axis is hidden even when they ask for it.
+  defp hide_sparkline_y_axis(cfg) do
+    if sparkline?(cfg) do
+      hide = &deep_merge(&1, %{show: false, labels: %{show: false}, title: %{text: nil}})
+
+      case cfg.yaxis do
+        [first | rest] -> %{cfg | yaxis: [hide.(first) | rest]}
+        %{} = axis -> %{cfg | yaxis: hide.(axis)}
+      end
+    else
+      cfg
+    end
+  end
 
   @doc """
   Normalizes `cfg.yaxis` into a list of fully-populated axis maps.
