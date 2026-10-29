@@ -322,9 +322,19 @@ defmodule EexCharts.Legend do
       |> Enum.map(&html_item(&1, cfg, fore, marker_box, im, font, hidden, on_click))
 
     wrapper_style =
-      "display:flex;flex-direction:row;flex-wrap:wrap;justify-content:#{justify};" <>
-        "align-items:center;padding:0 #{@html_padding_x}px;margin:0;box-sizing:border-box;" <>
-        "line-height:normal;height:100%;overflow:hidden;"
+      style(
+        display: "flex",
+        flex_direction: "row",
+        flex_wrap: "wrap",
+        justify_content: justify,
+        align_items: "center",
+        padding: "0 #{@html_padding_x}px",
+        margin: 0,
+        box_sizing: "border-box",
+        line_height: "normal",
+        height: "100%",
+        overflow: "hidden"
+      )
 
     el(
       "foreignObject",
@@ -383,8 +393,14 @@ defmodule EexCharts.Legend do
         %{
           class: "eexcharts-legend-marker",
           style:
-            "display:flex;position:relative;width:#{fmt(box_w)}px;height:#{fmt(box_h)}px;" <>
-              "margin:0 1px 0 0;flex:0 0 auto;"
+            style(
+              display: "flex",
+              position: "relative",
+              width: "#{fmt(box_w)}px",
+              height: "#{fmt(box_h)}px",
+              margin: "0 1px 0 0",
+              flex: "0 0 auto"
+            )
         },
         el(
           "svg",
@@ -399,9 +415,14 @@ defmodule EexCharts.Legend do
         %{
           class: "eexcharts-legend-text",
           style:
-            "padding-left:15px;margin-left:-15px;color:#{color};font-size:#{fmt(font)}px;" <>
-              "font-weight:#{cfg.legend.font_weight};" <>
-              if(cfg.legend.font_family, do: "font-family:#{cfg.legend.font_family};", else: "")
+            style(
+              padding_left: "15px",
+              margin_left: "-15px",
+              color: color,
+              font_size: "#{fmt(font)}px",
+              font_weight: cfg.legend.font_weight,
+              font_family: cfg.legend.font_family
+            )
         },
         esc(item.text)
       )
@@ -410,9 +431,13 @@ defmodule EexCharts.Legend do
       class: "eexcharts-legend-item eexcharts-legend-series",
       data_series: item.index,
       style:
-        "display:flex;align-items:center;margin:#{fmt(im.vertical)}px #{fmt(im.horizontal)}px;" <>
-          if(on_click, do: "cursor:pointer;", else: "") <>
-          if(hidden?, do: "opacity:0.4;", else: "")
+        style(
+          display: "flex",
+          align_items: "center",
+          margin: "#{fmt(im.vertical)}px #{fmt(im.horizontal)}px",
+          cursor: if(on_click, do: "pointer"),
+          opacity: if(hidden?, do: "0.4")
+        )
     }
 
     attrs =

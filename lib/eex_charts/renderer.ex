@@ -387,8 +387,8 @@ defmodule EexCharts.Renderer do
 
   defp svg_style(cfg, l) do
     if cfg.chart.pixel_perfect,
-      do: "width:#{fmt(l.w)}px;height:#{fmt(l.h)}px;display:block;",
-      else: "width:100%;height:auto;display:block;"
+      do: style(width: "#{fmt(l.w)}px", height: "#{fmt(l.h)}px", display: "block"),
+      else: style(width: "100%", height: "auto", display: "block")
   end
 
   @doc false
@@ -1283,7 +1283,7 @@ defmodule EexCharts.Renderer do
   @doc false
   def tooltip_row(color, label, value) do
     el("div", %{class: "eexcharts-tip-row"}, [
-      el("span", %{class: "eexcharts-tip-marker", style: "background:#{color}"}, ""),
+      el("span", %{class: "eexcharts-tip-marker", style: style(background: color)}, ""),
       el("span", %{class: "eexcharts-tip-label"}, [esc(label), ": "]),
       el("span", %{class: "eexcharts-tip-value"}, esc(value))
     ])
@@ -1296,7 +1296,7 @@ defmodule EexCharts.Renderer do
       %{
         class: tooltip_class(cfg.tooltip.theme),
         data_theme: tooltip_data_theme(cfg.tooltip.theme),
-        style: "font-size:#{fmt(cfg.tooltip.style.font_size)}px"
+        style: style(font_size: "#{fmt(cfg.tooltip.style.font_size)}px")
       },
       tips
     )
@@ -1461,15 +1461,14 @@ defmodule EexCharts.Renderer do
 
   def container(cfg, params, id, svg, tooltips) do
     fixed? = cfg.chart.max_width != false and is_number(cfg.chart.width)
-    max_w = if fixed?, do: "max-width:#{fmt(cfg.chart.width)}px;", else: ""
+    max_w = if fixed?, do: "#{fmt(cfg.chart.width)}px"
 
     # ApexCharts reserves `parentHeightOffset` px below a fixed-size chart by
     # raising the host element's min-height; mirror it so a chart dropped into
     # an ApexCharts-shaped layout occupies the same box.
     min_h =
       if fixed? and is_number(cfg.chart.height) and cfg.chart.parent_height_offset > 0,
-        do: "min-height:#{fmt(cfg.chart.height + cfg.chart.parent_height_offset)}px;",
-        else: ""
+        do: "#{fmt(cfg.chart.height + cfg.chart.parent_height_offset)}px"
 
     el(
       "div",
@@ -1479,7 +1478,7 @@ defmodule EexCharts.Renderer do
         "phx-hook": if(params[:hook] == false, do: nil, else: "EexCharts"),
         "phx-update": "replace",
         data_push_hover: params[:push_hover] || nil,
-        style: "position:relative;#{max_w}#{min_h}"
+        style: style(position: "relative", max_width: max_w, min_height: min_h)
       },
       [svg, tooltips]
     )
