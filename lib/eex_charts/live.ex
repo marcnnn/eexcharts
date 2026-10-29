@@ -28,6 +28,10 @@ defmodule EexCharts.Live do
   `measure` is `:width` (height stays as configured — the common case for a
   chart with a fixed row height), `:both`, or `false` to opt out.
 
+  The size comes from the browser, so it is treated as untrusted: each side is
+  rounded and clamped to `1..10_000` px, and a `"measured"` event without two
+  numbers is ignored.
+
   Register the hook alongside the tooltip one:
 
       import EexCharts from "../../deps/eexcharts/priv/static/eexcharts"
@@ -35,6 +39,10 @@ defmodule EexCharts.Live do
   """
 
   use Phoenix.LiveComponent
+
+  # Largest measured side, in px. A client can send any number; without a cap
+  # it sets the SVG coordinate space, and 1.0e308 raised in the layout.
+  @max_px 10_000
 
   @impl true
   def mount(socket) do
@@ -107,6 +115,9 @@ defmodule EexCharts.Live do
      |> assign(:measured_height, positive(h))}
   end
 
+  # Any other payload is not from our hook; ignore it rather than crash.
+  def handle_event("measured", _params, socket), do: {:noreply, socket}
+
   # Once the size comes from a real measurement, pin the SVG to those pixels:
   # stretching a whole-number viewBox into a fractional box re-antialiases
   # everything away from the left edge.
@@ -116,7 +127,7 @@ defmodule EexCharts.Live do
 
   defp pixel_perfect(assigns), do: assigns.options
 
-  defp positive(v) when is_number(v) and v > 0, do: round(v)
+  defp positive(v) when is_number(v) and v > 0, do: v |> min(@max_px) |> max(1) |> round()
   defp positive(_), do: nil
 
   defp chart_width(%{measure: false}), do: nil
