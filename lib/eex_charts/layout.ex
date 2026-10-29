@@ -139,7 +139,7 @@ defmodule EexCharts.Layout do
 
     right =
       pad.right + legend_right + right_title_w + right_label_w +
-        if(right_label_w > 0, do: 10, else: 0)
+        if(right_label_w > 0, do: 10, else: 0) + end_label_reserve(cfg)
 
     bottom_legend_h = if legend.position in [:bottom, :top], do: legend.h, else: 0
 
@@ -190,6 +190,11 @@ defmodule EexCharts.Layout do
       title_h: title_h
     }
   end
+
+  # Room right of the plot for line end labels, measured by
+  # `EexCharts.EndLabels.prepare/2`; 0 unless they are on.
+  defp end_label_reserve(%{end_labels: %{enabled: true, reserve: w}}), do: w
+  defp end_label_reserve(_cfg), do: 0
 
   # Chooses the appropriate scale (linear/nice or logarithmic) for one y-axis.
   defp axis_scale(axis, mn, mx, svg_dim) do
