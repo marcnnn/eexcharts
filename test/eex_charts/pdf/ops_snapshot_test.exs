@@ -16,7 +16,10 @@ defmodule EexCharts.PDF.OpsSnapshotTest do
 
       EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/eex_charts/pdf/ops_snapshot_test.exs
 
-  Review the diff in `test/snapshots/pdf/` before committing.
+  Numbers compare numerically, as in the SVG goldens (see
+  `EexCharts.SnapshotDiff`): the last bit of a trig result differs between
+  macOS and Linux. Only goldens that no longer match are rewritten. Review the
+  diff in `test/snapshots/pdf/` before committing.
   """
   use ExUnit.Case, async: true
 
@@ -253,16 +256,25 @@ defmodule EexCharts.PDF.OpsSnapshotTest do
         EexCharts.PDF.ops("snap", @chart.type, @chart.series, @chart.opts)
         |> format()
 
-      if @update? do
-        File.write!(@golden, actual)
-      else
-        assert File.exists?(@golden),
-               "missing golden #{@golden}. Seed it with EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test"
+      result =
+        if File.exists?(@golden),
+          do: EexCharts.SnapshotDiff.compare(actual, File.read!(@golden)),
+          else: {:error, "missing golden #{@golden}"}
 
-        assert actual == File.read!(@golden),
-               "PDF op snapshot mismatch for #{@chart.name}.\n" <>
-                 "If this change is intentional, regenerate with " <>
-                 "EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test."
+      case result do
+        :ok ->
+          :ok
+
+        {:error, _detail} when @update? ->
+          File.write!(@golden, actual)
+
+        {:error, detail} ->
+          flunk(
+            "PDF op snapshot mismatch for #{@chart.name}.\n\n" <>
+              detail <>
+              "\nIf this change is intentional, regenerate with " <>
+              "EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test."
+          )
       end
     end
   end
