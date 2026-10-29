@@ -54,8 +54,8 @@ fixed example sizes hide):
 ## Layer 1: SVG goldens (`mix test`)
 
 `test/svg_snapshot_test.exs` compares every example with
-`test/snapshots/<id>.svg` (`EexCharts.to_svg/4`) and `test/snapshots/<id>.html`
-(`EexCharts.render/4`): markup exactly, numbers numerically. Goldens say
+`test/snapshots/<id>.svg` (`EexCharts.to_svg/4`): markup exactly, numbers
+numerically. Goldens say
 "nothing changed", not "it is right", so a golden is only seeded after layers
 0, 3 and 4 passed. Seed or update with
 `EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/svg_snapshot_test.exs` and review

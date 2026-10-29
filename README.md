@@ -353,11 +353,10 @@ mix run dev/contact_sheet.exs --png   # tmp/contact_sheet.html + .png
 Two layers guard against visual regressions:
 
 **1. SVG golden snapshots** (`test/svg_snapshot_test.exs`) — fast and
-browserless, part of the normal `mix test`. Each example is rendered twice and
-compared against two committed goldens in `test/snapshots/`: `<id>.svg` holds
-the standalone `EexCharts.to_svg/4` output (a real SVG, so GitHub shows it as an
-image in review), `<id>.html` the full `EexCharts.render/4` fragment with its
-tooltips and hover furniture. Markup has to match
+browserless, part of the normal `mix test`. Each example is rendered with
+`EexCharts.to_svg/4` and compared against a committed `<id>.svg` golden in
+`test/snapshots/`, a real SVG that GitHub shows as an image in review. Markup
+has to match
 exactly; numbers have to match numerically, because coordinates are serialised
 at full precision and the last bit of a trig result is not the same on macOS as
 on the Linux runner that seeds the goldens (see `EexCharts.SnapshotDiff`). When
