@@ -21,6 +21,30 @@ defmodule EexCharts.Charts.Heatmap do
   legend with a continuous colour bar (bottom by default, `:top` or a
   vertical `:right` bar); see `EexCharts.Charts.Heatmap.GradientLegend`.
 
+  ## Per-cell paint and labels
+
+  A data point may be a map instead of a number: `%{x:, y:}` plus any of
+
+    * `fill_color` - the cell's colour, categorical: it replaces the colour
+      scale and `color_scale.ranges` for that cell;
+    * `stroke_color` - the cell's border (the separator stroke otherwise);
+    * `fill` - a fill map (`%{type: :none}` for an outline cell, a pattern),
+      see `EexCharts.PointStyle`;
+    * `label` - text drawn instead of the formatted value: a string, or a
+      list of lines whose items may be styled segments as in
+      `EexCharts.LabelText`. The lines are centred on the cell.
+
+  ```elixir
+  %{x: "State 2", y: 1, fill_color: "#ff6105",
+    label: [[%{text: "1", font_weight: 700}], "Row J"]}
+  ```
+
+  Labels only show with `data_labels.enabled: true`. On a cell with a hex
+  `fill_color` the on-mark label colour (its hex fallback under daisyUI)
+  gives way to white or dark grey when it falls below 4.5:1 contrast with
+  the fill; a `var(...)` fill keeps the on-mark colour. Without
+  `xaxis.categories` the `x` of map points names the columns.
+
   As in ApexCharts, the first series (index 0) is drawn at the **bottom** of
   the grid. Owns its full SVG assembly: `render_chart/3` returns the complete
   container (svg + tooltips).
@@ -28,8 +52,12 @@ defmodule EexCharts.Charts.Heatmap do
 
   import EexCharts.SVG
 
-  alias EexCharts.{Color, Config, Layout, Legend, Renderer}
+  alias EexCharts.{Color, Config, LabelText, Layout, Legend, PointStyle, Renderer}
   alias EexCharts.Charts.Heatmap.{GradientLegend, XLayout}
+
+  # WCAG AA for normal text: the floor below which a label on a cell's own
+  # `fill_color` switches to white or dark grey.
+  @label_contrast 4.5
 
   @doc "Renders the complete heatmap container."
   def render_chart(cfg, params, id) do
@@ -67,7 +95,12 @@ defmodule EexCharts.Charts.Heatmap do
         |> max(length(cfg.xaxis.categories))
       end
 
-    categories = Renderer.categories(cfg, n_cats)
+    categories =
+      case cfg.xaxis.categories do
+        [] -> point_categories(all_series, n_cats)
+        _ -> Renderer.categories(cfg, n_cats)
+      end
+
     ranges = normalize_ranges(get_in(cfg, [:plot_options, :heatmap, :color_scale, :ranges]))
 
     # ApexCharts normalizes heatmap shade intensity against the GLOBAL value
@@ -77,7 +110,7 @@ defmodule EexCharts.Charts.Heatmap do
       if value_x? do
         Enum.flat_map(series, fn s -> Enum.map(points[s.index], &elem(&1, 1)) end)
       else
-        series |> Enum.flat_map(& &1.data) |> Enum.filter(&is_number/1)
+        series |> Enum.flat_map(& &1.data) |> Enum.map(&cell_value/1) |> Enum.filter(&is_number/1)
       end
 
     {g_min, g_max} =
@@ -166,10 +199,13 @@ defmodule EexCharts.Charts.Heatmap do
         category_cells(cfg, series, categories, n_cats, l, ranges, ctx)
       end
 
+    {cells, pattern_defs} = PointStyle.link(cells, id)
+
     svg =
       Renderer.svg_open(cfg, l, id, [
         Renderer.background(cfg, l),
         Renderer.title(cfg, l),
+        pattern_defs,
         cell_rects(cfg, cells, params),
         data_labels(cfg, cells),
         series_labels(cfg, series, l, n_vis),
@@ -202,21 +238,17 @@ defmodule EexCharts.Charts.Heatmap do
 
           0..(n_cats - 1)
           |> Enum.map(fn j -> {j, Enum.at(s.data, j)} end)
-          |> Enum.reject(fn {_j, v} -> is_nil(v) end)
-          |> Enum.map(fn {j, v} ->
-            %{
-              series: s.index,
+          |> Enum.map(fn {j, point} -> {j, point, cell_value(point)} end)
+          |> Enum.reject(fn {_j, _point, v} -> is_nil(v) end)
+          |> Enum.map(fn {j, point, v} ->
+            cell(cfg, s, point, v, color_fn, fore_fn, %{
               j: j,
               x: grid_x + j * x_div,
               y: y,
               w: x_div,
               h: y_div,
-              value: v,
-              color: color_fn.(v),
-              fore: fore_fn.(v),
-              name: s.name,
               category: Enum.at(categories, j, to_string(j + 1))
-            }
+            })
           end)
         end)
       else
@@ -243,29 +275,66 @@ defmodule EexCharts.Charts.Heatmap do
       y = l.grid_y + (n_vis - 1 - p) * y_div
       {color_fn, fore_fn} = cell_color_fns(cfg, s, ranges, ctx)
 
-      for {x, v} <- points[s.index],
+      for {x, v, point} <- points[s.index],
           {left, right} = extents[x],
           left = max(left, lo),
           right = min(right, hi),
           right > left do
         x0 = Layout.x_value_pos(l, left)
 
-        %{
-          series: s.index,
+        cell(cfg, s, point, v, color_fn, fore_fn, %{
           j: col[x],
           x: x0,
           y: y,
           w: Layout.x_value_pos(l, right) - x0,
           h: y_div,
-          value: v,
-          color: color_fn.(v),
-          fore: fore_fn.(v),
-          name: s.name,
           category: XLayout.title(x, cfg.xaxis.type, step)
-        }
+        })
       end
     end)
   end
+
+  # One cell: geometry plus the value's colour-scale colour, the paint
+  # `PointStyle` resolves on top of it (a point's `fill_color` beats the
+  # scale and the ranges) and the point's own `label`, if any.
+  defp cell(cfg, s, point, v, color_fn, fore_fn, geometry) do
+    color = color_fn.(v)
+
+    Map.merge(geometry, %{
+      series: s.index,
+      value: v,
+      color: color,
+      fore: fore_fn.(v),
+      name: s.name,
+      point: point,
+      style: PointStyle.resolve(cfg, s, point, color),
+      label: point_label(point)
+    })
+  end
+
+  defp cell_value(v) when is_number(v), do: v
+  defp cell_value(%{} = point), do: Map.get(point, :y)
+  defp cell_value(_point), do: nil
+
+  defp point_label(%{label: label}), do: label
+  defp point_label(_point), do: nil
+
+  # Without `xaxis.categories`, `%{x:, y:}` points name the columns (as in
+  # ApexCharts); the longest series decides. Other data keeps 1, 2, 3...
+  defp point_categories(series, n_cats) do
+    xs =
+      series
+      |> Enum.map(& &1.data)
+      |> Enum.max_by(&length/1, fn -> [] end)
+      |> Enum.map(&point_x/1)
+
+    if xs != [] and Enum.all?(xs, &(not is_nil(&1))),
+      do: Enum.map(xs, &to_string/1),
+      else: Enum.map(1..max(n_cats, 1), &to_string/1)
+  end
+
+  defp point_x(%{x: x}), do: x
+  defp point_x(_point), do: nil
 
   # ── Cells ──────────────────────────────────────────────────────────────
 
@@ -275,19 +344,19 @@ defmodule EexCharts.Charts.Heatmap do
     on_click = params[:on_click]
 
     rects =
-      Enum.map(cells, fn c ->
+      Enum.map(cells, fn %{style: style} = c ->
         attrs = %{
-          class: "eexcharts-heatmap-rect",
+          class: rect_class(style),
           data_j: "#{c.series}-#{c.j}",
           x: c.x,
           y: c.y,
           width: c.w,
           height: c.h,
           rx: radius,
-          fill: c.color,
-          fill_opacity: cfg.fill.opacity,
-          stroke: stroke,
-          stroke_width: cfg.stroke.width
+          fill: style.fill,
+          fill_opacity: style.fill_opacity,
+          stroke: style.stroke || stroke,
+          stroke_width: style.stroke_width
         }
 
         attrs =
@@ -307,6 +376,9 @@ defmodule EexCharts.Charts.Heatmap do
 
     el("g", %{class: "eexcharts-heatmap"}, rects)
   end
+
+  defp rect_class(%{class: nil}), do: "eexcharts-heatmap-rect"
+  defp rect_class(%{class: class}), do: "eexcharts-heatmap-rect " <> class
 
   # Returns `{color_fn, fore_fn}` faithfully porting `TreemapHelpers`
   # `determineColor` + `getShadeColor` for the heatmap chart type. The base
@@ -375,23 +447,25 @@ defmodule EexCharts.Charts.Heatmap do
 
       labels =
         Enum.map(cells, fn c ->
+          x =
+            c.x + c.w / 2 +
+              EexCharts.DataLabels.offset(cfg.data_labels.offset_x, c.value, c.series, c.j)
+
           el(
             "text",
             %{
-              x:
-                c.x + c.w / 2 +
-                  EexCharts.DataLabels.offset(cfg.data_labels.offset_x, c.value, c.series, c.j),
+              x: x,
               y:
                 c.y + c.h / 2 +
                   EexCharts.DataLabels.offset(cfg.data_labels.offset_y, c.value, c.series, c.j),
               text_anchor: "middle",
               dominant_baseline: "central",
-              fill: c.fore,
+              fill: cell_label_color(cfg, c),
               font_size: style.font_size,
               font_weight: style.font_weight,
               class: "eexcharts-datalabel"
             },
-            esc(format_data_label(cfg, c.value))
+            cell_label(cfg, c, x)
           )
         end)
 
@@ -399,6 +473,30 @@ defmodule EexCharts.Charts.Heatmap do
     else
       []
     end
+  end
+
+  # A point's own `label` (a string, or lines of `EexCharts.LabelText`
+  # segments) replaces the formatted value; its lines centre on the cell.
+  defp cell_label(cfg, %{label: nil} = c, _x), do: esc(format_data_label(cfg, c.value))
+  defp cell_label(_cfg, %{label: label}, x), do: LabelText.content(label, x, :center, "central")
+
+  # On a cell with its own `fill_color` the on-mark colour may not read (white
+  # on a light grey), so it gives way to white or dark grey below WCAG AA
+  # contrast. A hex fill is measured against the on-mark colour's hex fallback:
+  # daisyUI's `*-content` pairs with a theme colour, not with the user's fill.
+  # A `var(...)` fill cannot be measured and keeps the on-mark colour. Outline
+  # and pattern cells follow `PointStyle`.
+  defp cell_label_color(cfg, c) do
+    on_mark =
+      case c.point do
+        %{fill_color: "#" <> _ = fill} ->
+          Color.legible(Color.resolve_vars(c.fore), fill, @label_contrast)
+
+        _ ->
+          c.fore
+      end
+
+    PointStyle.label_color(cfg, c.style, on_mark)
   end
 
   defp format_data_label(cfg, v) do
@@ -596,7 +694,7 @@ defmodule EexCharts.Charts.Heatmap do
         Enum.map(cells, fn c ->
           el("div", %{class: "eexcharts-tip", data_j: "#{c.series}-#{c.j}", hidden: true}, [
             el("div", %{class: "eexcharts-tip-title"}, esc(to_string(c.category))),
-            Renderer.tooltip_row(c.color, c.name, Renderer.format_tooltip_y(cfg, c.value))
+            Renderer.tooltip_row(tip_color(c), c.name, Renderer.format_tooltip_y(cfg, c.value))
           ])
         end)
 
@@ -605,6 +703,9 @@ defmodule EexCharts.Charts.Heatmap do
       []
     end
   end
+
+  defp tip_color(%{point: %{fill_color: fill}}) when is_binary(fill), do: fill
+  defp tip_color(c), do: c.color
 
   # ── Helpers ────────────────────────────────────────────────────────────────
 
