@@ -281,6 +281,20 @@ Two print-specific caveats:
   those fonts substitutes its own (layout is measured server-side, so labels
   stay correctly positioned); set a font the host has if typography matters.
 
+### Untrusted input
+
+Text is always HTML-escaped: series names, categories, labels, titles,
+annotation text and whatever a formatter returns are safe to take from user
+data.
+
+CSS values are checked rather than escaped. Colors, font families and the
+other values written into `style` attributes or SVG presentation attributes
+(`fill`, `stroke`, `font-family`, …) must be a single CSS value: hex, named
+colors, the CSS color functions, `var()`, `color-mix()` or a font stack. A
+value that would add a declaration or load a URL, such as
+`red;background:url(…)`, is left out of the markup, so the element falls back
+to its default. See `EexCharts.CSS` for the exact rule.
+
 ## Development
 
 ```sh

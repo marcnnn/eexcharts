@@ -11,7 +11,15 @@ defmodule EexCharts.SVG do
 
   Text content is the one exception: callers escape it themselves with
   `esc/1` and hand it over as iodata.
+
+  CSS values are checked here rather than at each call site. A `style` is
+  built with `style/1` from a list of declarations, and every declaration
+  value, like every CSS-valued presentation attribute (`fill`, `stroke`,
+  `font-family`, …), must pass `EexCharts.CSS.safe_value?/1`. A value that
+  fails is left out, so a color from user data cannot add CSS of its own.
   """
+
+  alias EexCharts.CSS
 
   @typedoc "A path command. `to_iodata/1` renders these into a `d` attribute."
   @type command ::
@@ -29,6 +37,9 @@ defmodule EexCharts.SVG do
   a second backend needs the numbers, not `"rotate(-90 12 34)"` to parse back.
   """
   @type transform :: {:translate, number, number} | {:rotate, number, number, number}
+
+  @typedoc "A `style` attribute: `{property, value}` declarations, in order."
+  @type style :: {:style, [{atom | binary, binary | number | atom | nil}]}
 
   @typedoc "A node of the element tree."
   @type node_t :: {:el, binary, map | keyword, term} | iodata | nil | [node_t]
@@ -78,6 +89,15 @@ defmodule EexCharts.SVG do
     Enum.reject(attrs, fn {k, _v} -> attr_name(k) in names end)
   end
 
+  # SVG presentation attributes that take a CSS value. Options feed several of
+  # them straight from user data (series colors, label segment fonts), and
+  # some (`cursor`, `fill`, `mask`) accept `url()`, so they get the same check
+  # as a `style` declaration.
+  @css_attrs ~w(fill stroke color stop-color flood-color lighting-color font-family
+                font-size font-weight font-style stroke-dasharray stroke-linecap
+                stroke-linejoin clip-path mask filter cursor marker-start
+                marker-mid marker-end)
+
   # Maps have no defined iteration order (and Erlang's varies across VM runs),
   # so sort map attributes by name for deterministic, stable output. Keyword
   # lists keep their given order.
@@ -86,15 +106,19 @@ defmodule EexCharts.SVG do
   end
 
   defp attrs_io(attrs) do
-    for {k, v} <- attrs, v != nil and v != false do
-      [" ", attr_name(k), "=\"", attr_value(v), "\""]
+    for {k, v} <- attrs, v != nil and v != false, name = attr_name(k), safe_attr?(name, v) do
+      [" ", name, "=\"", attr_value(v), "\""]
     end
   end
+
+  defp safe_attr?(name, v) when name in @css_attrs and is_binary(v), do: CSS.safe_value?(v)
+  defp safe_attr?(_name, _v), do: true
 
   defp attr_name(k) when is_atom(k), do: k |> Atom.to_string() |> String.replace("_", "-")
   defp attr_name(k) when is_binary(k), do: k
 
   defp attr_value(true), do: ""
+  defp attr_value({:style, decls}), do: decls |> style_io() |> esc()
   defp attr_value(v) when is_binary(v), do: esc(v)
   defp attr_value(:close), do: path_io([:close])
   defp attr_value(v) when is_atom(v), do: Atom.to_string(v)
@@ -122,6 +146,28 @@ defmodule EexCharts.SVG do
   defp path?(:close), do: true
   defp path?(cmd) when is_tuple(cmd), do: true
   defp path?(_), do: false
+
+  @doc """
+  A `style` attribute from `{property, value}` declarations, kept in order.
+
+  Property names may be atoms (`:font_size` becomes `font-size`). A `nil`
+  value drops its declaration, numbers are formatted with `fmt/1`, and any
+  other value must pass `EexCharts.CSS.safe_value?/1` or is dropped too.
+  Each kept declaration ends in `;`.
+
+      style(background: "#008FFB", font_size: "12px")
+  """
+  def style(decls), do: {:style, decls}
+
+  defp style_io(decls) do
+    for {prop, value} <- decls, value != nil, CSS.safe_value?(value), into: "" do
+      attr_name(prop) <> ":" <> css_io(value) <> ";"
+    end
+  end
+
+  defp css_io(v) when is_number(v), do: fmt(v)
+  defp css_io(v) when is_atom(v), do: Atom.to_string(v)
+  defp css_io(v), do: v
 
   @doc """
   Renders a list of path commands into the `d` attribute's iodata.

@@ -128,6 +128,20 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is unchanged, as the SVG goldens confirm. CI runs the suite on 1.20 as well,
   and the format and warning gates moved to it.
 
+### Security
+
+- CSS values can no longer add CSS of their own. A color or font family was
+  HTML-escaped but otherwise written into `style` attributes as is, so a
+  series color of `red;background:url(https://example.com/x)` made the
+  browser fetch that URL. Every `style` is now built from declarations
+  (`EexCharts.SVG.style/1`), and each declaration value, like every
+  CSS-valued presentation attribute (`fill`, `stroke`, `font-family`, …),
+  must pass `EexCharts.CSS.safe_value?/1` or is dropped. Ordinary colors,
+  `var()`, `color-mix()` and font stacks are unaffected. Each `style`
+  attribute now ends in `;`.
+- A malformed hex color such as `#ggg` no longer raises in gradient and
+  heatmap shading; it is shaded with `color-mix()` like any non-hex color.
+
 ## v0.1.1 — 2026-09-03
 
 ### Fixed
