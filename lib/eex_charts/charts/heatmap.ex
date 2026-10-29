@@ -45,8 +45,23 @@ defmodule EexCharts.Charts.Heatmap do
   the fill; a `var(...)` fill keeps the on-mark colour. Without
   `xaxis.categories` the `x` of map points names the columns.
 
+  ## Row order and axis position
+
   As in ApexCharts, the first series (index 0) is drawn at the **bottom** of
-  the grid. Owns its full SVG assembly: `render_chart/3` returns the complete
+  the grid. `plot_options.heatmap.reverse_rows: true` draws the series top to
+  bottom in the order given, so a table reads as written; row labels,
+  tooltips and clicks follow the rows.
+
+  `xaxis.position: :top` draws the x labels (and value-axis ticks) above the
+  plot instead of below it, between a top legend and the cells. Other chart
+  types ignore `xaxis.position` for now.
+
+  ```elixir
+  plot_options: %{heatmap: %{reverse_rows: true}},
+  xaxis: %{position: :top}
+  ```
+
+  Owns its full SVG assembly: `render_chart/3` returns the complete
   container (svg + tooltips).
   """
 
@@ -162,14 +177,18 @@ defmodule EexCharts.Charts.Heatmap do
       end
 
     x_tick_h = if value_x? and cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
-    x_label_h = if cfg.xaxis.labels.show, do: x_font + 12 + x_tick_h, else: 4 + x_tick_h
+    x_axis_h = if cfg.xaxis.labels.show, do: x_font + 12 + x_tick_h, else: 4 + x_tick_h
+
+    # `xaxis.position: :top` moves the axis band above the plot, below a
+    # top legend; the bottom keeps a small margin.
+    {top_axis_h, x_label_h} = if top_axis?(cfg), do: {x_axis_h, 4}, else: {0, x_axis_h}
 
     top_legend_h = if(legend_pos == :top, do: legend_h, else: 0) + g_top
     bottom_legend_h = if(legend_pos == :bottom, do: legend_h, else: 0) + g_bottom
     right_legend_w = if(legend_pos == :right, do: (legend && legend.w) || 0, else: 0) + g_right
 
     grid_x = pad.left + left_w + if(left_w > 0, do: 10, else: 0)
-    grid_y = title_h + top_legend_h + pad.top + 6
+    grid_y = title_h + top_legend_h + pad.top + 6 + top_axis_h
     grid_w = max(w - grid_x - pad.right - right_legend_w, 10)
     grid_h = max(h - grid_y - x_label_h - pad.bottom - bottom_legend_h, 10)
 
@@ -201,6 +220,10 @@ defmodule EexCharts.Charts.Heatmap do
 
     {cells, pattern_defs} = PointStyle.link(cells, id)
 
+    # Legends place themselves against the plot's top edge; with the axis on
+    # top they belong above the axis band.
+    legend_l = %{l | grid_y: l.grid_y - top_axis_h, grid_h: l.grid_h + top_axis_h}
+
     svg =
       Renderer.svg_open(cfg, l, id, [
         Renderer.background(cfg, l),
@@ -213,8 +236,8 @@ defmodule EexCharts.Charts.Heatmap do
           do: value_x_labels(cfg, l),
           else: category_labels(cfg, categories, l, n_cats)
         ),
-        legend_io(cfg, l, legend, ranges, legend_pos, legend_h, hidden, params),
-        gradient_legend(gradient, cfg, l, id, series, ctx)
+        legend_io(cfg, legend_l, legend, ranges, legend_pos, legend_h, hidden, params),
+        gradient_legend(gradient, cfg, legend_l, id, series, ctx)
       ])
 
     Renderer.container(cfg, params, id, svg, tooltips(cfg, cells))
@@ -232,8 +255,7 @@ defmodule EexCharts.Charts.Heatmap do
         series
         |> Enum.with_index()
         |> Enum.flat_map(fn {s, p} ->
-          # Series 0 sits at the bottom (ApexCharts draws bottom-up).
-          y = grid_y + (n_vis - 1 - p) * y_div
+          y = grid_y + row_index(cfg, p, n_vis) * y_div
           {color_fn, fore_fn} = cell_color_fns(cfg, s, ranges, ctx)
 
           0..(n_cats - 1)
@@ -272,7 +294,7 @@ defmodule EexCharts.Charts.Heatmap do
     series
     |> Enum.with_index()
     |> Enum.flat_map(fn {s, p} ->
-      y = l.grid_y + (n_vis - 1 - p) * y_div
+      y = l.grid_y + row_index(cfg, p, n_vis) * y_div
       {color_fn, fore_fn} = cell_color_fns(cfg, s, ranges, ctx)
 
       for {x, v, point} <- points[s.index],
@@ -311,6 +333,14 @@ defmodule EexCharts.Charts.Heatmap do
       label: point_label(point)
     })
   end
+
+  # Grid row of the p-th visible series: series 0 sits at the bottom
+  # (ApexCharts draws bottom-up) unless `reverse_rows` puts it on top.
+  defp row_index(cfg, p, n_vis) do
+    if get_in(cfg, [:plot_options, :heatmap, :reverse_rows]), do: p, else: n_vis - 1 - p
+  end
+
+  defp top_axis?(cfg), do: cfg.xaxis.position == :top
 
   defp cell_value(v) when is_number(v), do: v
   defp cell_value(%{} = point), do: Map.get(point, :y)
@@ -526,7 +556,7 @@ defmodule EexCharts.Charts.Heatmap do
         series
         |> Enum.with_index()
         |> Enum.map(fn {s, p} ->
-          y = l.grid_y + (n_vis - 1 - p) * y_div + y_div / 2
+          y = l.grid_y + row_index(cfg, p, n_vis) * y_div + y_div / 2
 
           el(
             "text",
@@ -563,7 +593,7 @@ defmodule EexCharts.Charts.Heatmap do
             "text",
             %{
               x: l.grid_x + (j + 0.5) * x_div,
-              y: l.grid_y + l.grid_h + style.font_size + 4,
+              y: category_label_y(cfg, l, style.font_size),
               text_anchor: "middle",
               fill: color,
               font_size: style.font_size,
@@ -579,12 +609,22 @@ defmodule EexCharts.Charts.Heatmap do
     end
   end
 
+  # Baseline of a category label: below the plot, or above it with the axis
+  # on top.
+  defp category_label_y(cfg, l, font_size) do
+    if top_axis?(cfg), do: l.grid_y - 8, else: l.grid_y + l.grid_h + font_size + 4
+  end
+
   # Value x-axis: the shared value-axis labels plus small tick marks at each
   # labelled value, so the reader can see where a value falls inside a cell.
   defp value_x_labels(cfg, l) do
+    tick_h = cfg.xaxis.axis_ticks.height
+    top? = top_axis?(cfg)
+
     ticks =
       if cfg.xaxis.axis_ticks.show and cfg.xaxis.labels.show do
-        y0 = l.grid_y + l.grid_h
+        # The ticks hang off the plot edge the axis sits on.
+        edge = if top?, do: l.grid_y - tick_h, else: l.grid_y + l.grid_h
 
         marks =
           Enum.map(l.x_scale.ticks, fn %{value: v} ->
@@ -593,8 +633,8 @@ defmodule EexCharts.Charts.Heatmap do
             el("line", %{
               x1: x,
               x2: x,
-              y1: y0,
-              y2: y0 + cfg.xaxis.axis_ticks.height,
+              y1: edge,
+              y2: edge + tick_h,
               stroke: cfg.xaxis.axis_ticks.color
             })
           end)
@@ -604,7 +644,17 @@ defmodule EexCharts.Charts.Heatmap do
         []
       end
 
-    [ticks, Renderer.value_x_axis_labels(cfg, l)]
+    [ticks, Renderer.value_x_axis_labels(cfg, label_layout(cfg, l, top?))]
+  end
+
+  # The shared value-axis labels sit `tick + font + 6` below the plot's
+  # bottom edge. For a top axis hand them a plot whose bottom edge lies far
+  # enough above `grid_y` that the baseline lands `tick + 6` above the plot.
+  defp label_layout(_cfg, l, false), do: l
+
+  defp label_layout(cfg, l, true) do
+    tick_h = if cfg.xaxis.axis_ticks.show, do: cfg.xaxis.axis_ticks.height, else: 0
+    %{l | grid_h: -(2 * tick_h + cfg.xaxis.labels.style.font_size + 12)}
   end
 
   defp label_color(nil, fore), do: fore
