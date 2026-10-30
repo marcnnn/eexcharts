@@ -415,10 +415,6 @@ a change to the output is intentional, regenerate the goldens:
 EEXCHARTS_UPDATE_SNAPSHOTS=1 mix test test/svg_snapshot_test.exs
 ```
 
-This layer is environment-sensitive too: coordinates serialize at full float
-precision, so a 1-ULP `:math.sin`/`:math.cos` difference between Darwin libm and
-glibc can make a golden generated on Linux CI fail on macOS (currently `n7`).
-
 **2. Pixel screenshots** (`test/visual_test.exs`, tagged `:visual`, excluded by
 default) — real headless-Chromium screenshots via
 [phoenix_test_playwright](https://hex.pm/packages/phoenix_test_playwright),
@@ -434,15 +430,13 @@ mix test --only visual        # asserts against test/visual/baseline/
 `assert_screenshot/3` saves a baseline on first run and compares thereafter
 (diffs land in `test/visual/baseline/__diff__/`).
 
-#### Baselines are not committed yet
+#### Strict mode
 
-`test/visual/baseline/` currently contains no `*.png`. Since a missing baseline
-makes `assert_screenshot/3` seed-and-pass, a job pointed at an empty baseline
-directory can never fail. So the CI `visual` job runs with
+A missing baseline makes `assert_screenshot/3` seed-and-pass, so a job with no
+baselines on disk could never fail. The CI `visual` job therefore runs with
 `EEXCHARTS_REQUIRE_BASELINE=1`, which makes `test/visual_test.exs` assert the
 baseline file exists *before* screenshotting and fail with instructions if it
-doesn't. **That job fails until the baselines are seeded and merged — on
-purpose.** It's the difference between a real gate and a green badge.
+doesn't. A new example needs its baseline committed before CI passes.
 
 Because pixel output depends on font rendering, **baselines must be generated
 in the same environment they're checked against**, i.e. inside the official
@@ -456,9 +450,9 @@ gh workflow run visual-baselines.yml      # or Actions -> Visual baselines -> Ru
 
 It deletes every existing baseline, re-runs the suite in that container with
 strict mode off so each screenshot is written fresh, uploads the PNGs as an
-artifact, and opens (or updates) a PR adding them. Review the images, merge,
-and the CI gate goes live. Re-run the same workflow whenever an intentional
-rendering change makes the baselines stale.
+artifact, and opens (or updates) a PR with them. Review the images and merge.
+Re-run it whenever a new example or an intentional rendering change makes the
+baselines stale.
 
 Locally, leave `EEXCHARTS_REQUIRE_BASELINE` unset — `mix test --only visual`
 will still generate images you can eyeball; they just won't match CI's font

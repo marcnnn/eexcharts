@@ -10,19 +10,17 @@ defmodule EexCharts.VisualTest do
 
       mix test --only visual
 
-  ## Baselines are not committed yet
+  ## Baselines
 
-  `test/visual/baseline/` currently holds no `*.png` — only a `.gitkeep`. That
-  matters, because `assert_screenshot/3` **saves a baseline and passes** when
-  none exists on disk, and only compares on subsequent runs. A CI job running
-  against an empty baseline directory therefore seeds fresh baselines on every
-  run and can never fail: a green check with zero pixel coverage.
+  `test/visual/baseline/` holds one `<id>.png` per example. `assert_screenshot/3`
+  **saves a baseline and passes** when none exists on disk, and only compares on
+  subsequent runs, so without strict mode (below) a missing baseline is never a
+  failure.
 
-  Seed them with the `Visual baselines` workflow
+  Regenerate them with the `Visual baselines` workflow
   (`.github/workflows/visual-baselines.yml`, `workflow_dispatch`), which runs
   this suite inside the Playwright image and opens a PR with the generated
-  PNGs. Until that PR is merged, the CI `visual` job fails on purpose — see
-  "Strict mode" below.
+  PNGs.
 
   ## Strict mode
 

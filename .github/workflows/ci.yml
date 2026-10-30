@@ -85,9 +85,8 @@ jobs:
   # Runs in the official Playwright image so fonts/rendering match the
   # baselines (see test/visual_test.exs "Determinism").
   #
-  # NOTE: test/visual/baseline/ holds no PNGs yet, so this job FAILS by design
-  # (see EEXCHARTS_REQUIRE_BASELINE below). Seed the baselines with the
-  # "Visual baselines" workflow and merge its PR to turn the gate green.
+  # A missing baseline fails (see EEXCHARTS_REQUIRE_BASELINE below); regenerate
+  # them with the "Visual baselines" workflow.
   visual:
     runs-on: ubuntu-latest
     container:
@@ -95,8 +94,8 @@ jobs:
     env:
       MIX_ENV: test
       # Strict mode: a missing baseline is a failure, not a silent
-      # seed-and-pass. Without this, an empty test/visual/baseline/ makes this
-      # job re-seed on every run and pass unconditionally -- a gate that cannot
+      # seed-and-pass. Without this, a missing baseline makes this
+      # job seed it and pass unconditionally -- a gate that cannot
       # fail. Local runs leave it unset so they can still generate images.
       EEXCHARTS_REQUIRE_BASELINE: "1"
       # erlef/setup-beam can't auto-detect the OS inside a container; the
