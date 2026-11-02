@@ -207,6 +207,14 @@ defmodule EexCharts.Renderer do
     # themselves are the hover targets — no band zones.
     zones = if Layout.value_x?(cfg), do: [], else: hover_zones(cfg, l, params)
 
+    # Range bar zones are drawn over the bars. With per-point tooltips every bar
+    # is its own hover (and click) target, so a row zone on top would swallow
+    # the pointer before it reaches the bar: leave the zones out.
+    zones =
+      if cfg.chart.type == :range_bar and Charts.RangeBar.per_point_tooltips?(cfg),
+        do: [],
+        else: zones
+
     svg =
       svg_open(cfg, l, id, [
         background(cfg, l),
@@ -1294,6 +1302,18 @@ defmodule EexCharts.Renderer do
   # `anno_tips`: point-annotation tooltips; they show even when the series
   # tooltip is off.
   defp cartesian_tooltips(cfg, series, categories, n, anno_tips) do
+    if cfg.tooltip.enabled and n > 0 and cfg.chart.type == :range_bar and
+         Charts.RangeBar.per_point_tooltips?(cfg) do
+      cats = Indexed.new(categories)
+      title_for = fn j -> format_tooltip_x(cfg, Indexed.at(cats, j, to_string(j + 1))) end
+
+      tooltip_container(cfg, Charts.RangeBar.point_tooltips(cfg, series, title_for) ++ anno_tips)
+    else
+      row_tooltips(cfg, series, categories, n, anno_tips)
+    end
+  end
+
+  defp row_tooltips(cfg, series, categories, n, anno_tips) do
     if cfg.tooltip.enabled and n > 0 do
       cats = Indexed.new(categories)
       columns = Enum.map(series, &{&1, Indexed.new(&1.data), EexCharts.Goals.indexed(&1)})

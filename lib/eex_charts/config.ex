@@ -336,7 +336,10 @@ defmodule EexCharts.Config do
         follow_cursor: false,
         style: %{font_size: 12},
         x_formatter: nil,
-        y_formatter: nil
+        y_formatter: nil,
+        # Range bars: one tooltip per bar instead of one per row (see
+        # `EexCharts.Charts.RangeBar.per_point_tooltips?/1`).
+        per_point: false
       },
       fill: %{
         type: :solid,

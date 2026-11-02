@@ -79,7 +79,7 @@ defmodule EexCharts.Charts.RangeBar do
         Enum.map(rects, fn r ->
           attrs = %{
             class: Enum.join(["eexcharts-bar" | List.wrap(r.style.class)], " "),
-            data_j: r.row,
+            data_j: if(per_point_tooltips?(cfg), do: point_key(r.series, r.index), else: r.row),
             d: Charts.Bar.bar_path(cfg, r, l.horizontal),
             fill: r.style.fill,
             fill_opacity: r.style.fill_opacity,
@@ -483,6 +483,46 @@ defmodule EexCharts.Charts.RangeBar do
       nil -> ""
     end
   end
+
+  @doc """
+  Whether each bar gets its own tooltip (`tooltip.per_point: true`) instead of
+  one tooltip per row listing every bar in it. On a timeline a row can hold many
+  bars; with `per_point` hovering a bar shows only that bar. Its tooltip is
+  titled with the row label and can carry one extra line from the point's
+  `tooltip` field (`%{x: "Row A", y: [from, to], tooltip: "3 of 4 done"}`).
+  """
+  def per_point_tooltips?(cfg) do
+    cfg.tooltip.per_point == true and not cfg.plot_options.bar.is_dumbbell
+  end
+
+  @doc "The `data-j` key that ties a bar to its own tooltip in per-point mode."
+  def point_key(series_index, point_index), do: "p#{series_index}-#{point_index}"
+
+  @doc """
+  Per-point tooltips: one `.eexcharts-tip` per drawn bar, keyed by
+  `point_key/2`. `title_for` maps a row index to the tooltip title.
+  """
+  def point_tooltips(cfg, series, title_for) do
+    rows = row_index(cfg)
+
+    for s <- series, {p, k} <- Enum.with_index(s.data), range(p) != nil do
+      color = point_color(p) || Config.color_at(cfg, s.index)
+
+      el("div", %{class: "eexcharts-tip", data_j: point_key(s.index, k), hidden: true}, [
+        el("div", %{class: "eexcharts-tip-title"}, esc(title_for.(row_of(rows, p, k)))),
+        EexCharts.Renderer.tooltip_row(color, s.name, tooltip_value(cfg, p)),
+        extra_tooltip_line(p)
+      ])
+    end
+  end
+
+  defp point_color(%{fill_color: color}) when is_binary(color), do: color
+  defp point_color(_point), do: nil
+
+  defp extra_tooltip_line(%{tooltip: text}) when is_binary(text) and text != "",
+    do: el("div", %{class: "eexcharts-tip-row eexcharts-tip-note"}, esc(text))
+
+  defp extra_tooltip_line(_point), do: []
 
   @doc """
   Tooltip rows of series `s` for row `j`: one per point drawn in that row
