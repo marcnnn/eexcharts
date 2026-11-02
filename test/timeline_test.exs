@@ -203,6 +203,83 @@ defmodule EexCharts.TimelineTest do
       assert tip =~ "01 Jun 2024 – 15 Aug 2024"
       assert tip =~ "01 Aug 2026 – 05 Nov 2026"
     end
+
+    test "per_point gives every bar its own tooltip, titled with its row" do
+      html = live(@tracks, %{tooltip: %{per_point: true}})
+
+      tips =
+        Regex.scan(
+          ~r/<div class="eexcharts-tip" data-j="([^"]+)"[^>]*>(.*?)<\/div><\/div>/s,
+          html
+        )
+
+      assert Enum.map(tips, fn [_, key, _] -> key end) == ~w(p0-0 p0-1 p0-2 p0-3 p0-4)
+
+      [_, _, second] = Enum.at(tips, 1)
+      assert second =~ "Track 1"
+      assert second =~ "01 Jan 2025 – 01 Apr 2025"
+      refute second =~ "01 Jan 2024"
+
+      # Each bar points at its own tooltip.
+      keys = Regex.scan(~r/<path class="eexcharts-bar[^"]*"[^>]*data-j="([^"]+)"/, html)
+      assert Enum.map(keys, fn [_, key] -> key end) == ~w(p0-0 p0-1 p0-2 p0-3 p0-4)
+    end
+
+    test "per_point draws no row zones over the bars" do
+      assert live(@tracks, %{}) =~ ~s(class="eexcharts-zone")
+      refute live(@tracks, %{tooltip: %{per_point: true}}) =~ ~s(class="eexcharts-zone")
+    end
+
+    test "per_point keeps phx-click on the bars" do
+      {:safe, io} =
+        EexCharts.render("t", :range_bar, @tracks,
+          options: Map.put(@opts, :tooltip, %{per_point: true}),
+          on_click: "picked"
+        )
+
+      html = IO.iodata_to_binary(io)
+      assert length(Regex.scan(~r/<path class="eexcharts-bar[^>]*phx-click="picked"/, html)) == 5
+    end
+
+    test "per_point tooltips show a point's own note and fill colour" do
+      series = [
+        %{
+          name: "Series 1",
+          data: [
+            %{
+              x: "Row A",
+              y: [~D[2026-01-01], ~D[2026-02-01]],
+              tooltip: "3 of 4 done",
+              fill_color: "#123456"
+            },
+            %{x: "Row A", y: [~D[2026-03-01], ~D[2026-04-01]]}
+          ]
+        }
+      ]
+
+      html = live(series, %{tooltip: %{per_point: true}})
+
+      [first] = Regex.run(~r/<div class="eexcharts-tip" data-j="p0-0".*?<\/div><\/div>/s, html)
+      assert first =~ "3 of 4 done"
+      assert first =~ "background:#123456"
+
+      [second] = Regex.run(~r/<div class="eexcharts-tip" data-j="p0-1".*?<\/div><\/div>/s, html)
+      refute second =~ "3 of 4 done"
+    end
+
+    test "per_point notes are escaped" do
+      series = [
+        %{
+          name: "S",
+          data: [%{x: "Row A", y: [~D[2026-01-01], ~D[2026-02-01]], tooltip: "<b>x</b>"}]
+        }
+      ]
+
+      html = live(series, %{tooltip: %{per_point: true}})
+
+      assert html =~ "&lt;b&gt;x&lt;/b&gt;"
+      refute html =~ "<b>x</b>"
+    end
   end
 
   describe "data labels" do
